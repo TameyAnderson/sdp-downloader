@@ -1,0 +1,76 @@
+# --- Secrets: never commit ---
+# --- Секрети: не комітити ніколи ---
+.env
+.env.*
+!.env.example
+!.env.lite.example
+*.token
+*.secret
+
+# Any cookies file: it is effectively a key to the account (login without
+# a password or 2FA).
+# Будь-який файл cookies: це фактично ключ від акаунта (вхід без пароля й 2FA).
+cookies.txt
+*cookies*.txt
+*cookies*.json
+*.cookies
+*.netscape
+
+# --- Bot data: statistics, access lists, file_id cache ---
+# --- Дані бота: статистика, доступи, кеш file_id ---
+*.db
+*.sqlite
+*.sqlite3
+stats.db*
+cache.json
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# --- Media and temporary files ---
+# --- Медіа й тимчасове ---
+*.mp4
+*.mkv
+*.webm
+*.mp3
+*.m4a
+*.part
+*.ytdl
+tmp/
+*.log
+
+# --- Working drafts ---
+# --- Робочі чернетки ---
+*.bak
+*.orig
+*.rej
+patch*.py
+
+# --- OS and editors ---
+# --- ОС і редактори ---
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.swp
+
+# --- Tests ---
+# --- Тести ---
+.pytest_cache/
+tests/__pycache__/
+
+# Screenshots in docs/ are the opposite — they belong in the repository.
+# Скріншоти в docs/ — навпаки, потрібні в репозиторії.
+!docs/*.png
+
+# --- Working notes: roadmap, competitor comparison, banner generator ---
+# Kept locally, not published: they go stale and are of no use to anyone else.
+# --- Робочі нотатки: роадмап, порівняння, генератор банера ---
+# Лежать локально, у репозиторій не йдуть: застарівають і нікому, крім нас,
+# не потрібні.
+notes/

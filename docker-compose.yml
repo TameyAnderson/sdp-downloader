@@ -1,0 +1,231 @@
+services:
+  video-bot:
+    # Prebuilt image — nothing to compile locally.
+    #   :latest  the newest release (published when a v* tag is pushed)
+    #   :edge    whatever is on main right now
+    #   :v1.0    a fixed version, updates only when you say so
+    # Override without touching this file: set SDP_IMAGE as a stack /
+    # environment variable (handy in Portainer, where a Git-based stack
+    # cannot be edited inline).
+    #
+    # Готовий образ — нічого збирати локально.
+    #   :latest  найсвіжіший реліз (з'являється, коли запушено тег v*)
+    #   :edge    поточний стан гілки main
+    #   :v1.0    фіксована версія, оновлюється лише за твоєї згоди
+    # Змінити, не чіпаючи цей файл: задай змінну SDP_IMAGE у стеку
+    # (зручно в Portainer, де Git-стек не редагується вручну).
+    image: ${SDP_IMAGE:-ghcr.io/tameyanderson/sdp-downloader:latest}
+    # Building from source instead? Comment out image and uncomment this:
+    # Волієш збирати з коду? Закоментуй image і розкоментуй це:
+    # build: .
+    container_name: video-bot
+    restart: unless-stopped
+    depends_on:
+      - cobalt-api
+      - bgutil-provider
+    # Values come from the stack variables (Portainer -> Environment variables).
+    # No .env file needed; only BOT_TOKEN is mandatory.
+    # Значення підставляються зі змінних стеку (Portainer -> Environment variables).
+    # Файл .env не потрібен; обов'язковий лише BOT_TOKEN.
+    environment:
+      BOT_TOKEN: ${BOT_TOKEN}
+      ADMIN_ID: ${ADMIN_ID:-0}
+      # How often to check for updates (libraries + repository), in minutes.
+      # Раз на скільки хвилин перевіряти оновлення (бібліотеки + репозиторій).
+      CHECK_INTERVAL_MINUTES: ${CHECK_INTERVAL_MINUTES:-15}
+      # 1 = pull a fresh yt-dlp at startup (channel below). Fixes broken
+      # extractors without rebuilding the image.
+      # 1 = при старті тягнути свіжий yt-dlp (канал нижче). Лікує зламані
+      # екстрактори без перезбірки образу.
+      AUTO_UPGRADE_YTDLP: ${AUTO_UPGRADE_YTDLP:-1}
+      ENABLE_TIKTOK: ${ENABLE_TIKTOK:-1}
+      ENABLE_YOUTUBE: ${ENABLE_YOUTUBE:-1}
+      ENABLE_INSTAGRAM: ${ENABLE_INSTAGRAM:-1}
+      ENABLE_FACEBOOK: ${ENABLE_FACEBOOK:-1}
+      ENABLE_COBALT: ${ENABLE_COBALT:-1}
+      COBALT_API_URL: ${COBALT_API_URL:-http://cobalt-api:9010}
+      ENABLE_TIKWM: ${ENABLE_TIKWM:-1}
+      MAX_FILE_SIZE_MB: ${MAX_FILE_SIZE_MB:-}
+      MAX_CONCURRENT_DOWNLOADS: ${MAX_CONCURRENT_DOWNLOADS:-8}
+      MAX_HEIGHT: ${MAX_HEIGHT:-720}
+      LONG_MAX_HEIGHT: ${LONG_MAX_HEIGHT:-2160}
+      LONG_MIN_HEIGHT: ${LONG_MIN_HEIGHT:-1080}
+      CONCURRENT_FRAGMENTS: ${CONCURRENT_FRAGMENTS:-5}
+      VERIFY_MEDIA: ${VERIFY_MEDIA:-1}
+      VERIFY_DEEP: ${VERIFY_DEEP:-0}
+      YTDLP_SLEEP: ${YTDLP_SLEEP:-0}
+      THUMBNAILS: ${THUMBNAILS:-1}
+      # Lives on the botdata volume -> survives redeploys. You can simply send
+      # the file to the bot in private and it stores it here itself.
+      # Лежить на volume botdata -> переживає передеплой. Файл можна просто
+      # надіслати боту в приват — він сам збереже сюди.
+      COOKIES_FILE: ${COOKIES_FILE:-/data/cookies.txt}
+      COOKIES_WARN_DAYS: ${COOKIES_WARN_DAYS:-3}
+      COOKIES_MAX_BYTES: ${COOKIES_MAX_BYTES:-262144}
+      PROXY: ${PROXY:-}
+      CACHE_FILE: /data/cache.json
+      HEALTH_PORT: "8080"
+      POT_PROVIDER_URL: ${POT_PROVIDER_URL:-http://bgutil-provider:4416}
+      ENABLE_CACHE: ${ENABLE_CACHE:-0}
+      CACHE_CLEAR_INTERVAL_DAYS: ${CACHE_CLEAR_INTERVAL_DAYS:-7}
+      # Empty = cloud Telegram (50 MB). http://telegram-bot-api:8081 AFTER the
+      # logOut = send up to 2 GB through the local server (profile bigfiles).
+      # Порожньо = хмарний Telegram (50 МБ). http://telegram-bot-api:8081 ПІСЛЯ
+      # logOut = слати до 2 ГБ через локальний сервер (профіль bigfiles).
+      TELEGRAM_API_URL: ${TELEGRAM_API_URL:-}
+      WEBAPP_ENABLED: ${WEBAPP_ENABLED:-0}
+      WEBAPP_AUTH_TTL: ${WEBAPP_AUTH_TTL:-86400}
+
+      # --- engines and fallbacks / рушії та фолбеки ---
+      COBALT_FALLBACK_URL: ${COBALT_FALLBACK_URL:-}
+      COBALT_RETRIES: ${COBALT_RETRIES:-2}
+      COBALT_RETRY_DELAY: ${COBALT_RETRY_DELAY:-3}
+      TIKWM_API: ${TIKWM_API:-https://tikwm.com/api/}
+
+      # --- Telegram limits and abuse protection ---
+      # --- ліміт Telegram і захист від зловживань ---
+      FLOOD_MAX_RETRIES: ${FLOOD_MAX_RETRIES:-5}
+      CHAT_SEND_INTERVAL: ${CHAT_SEND_INTERVAL:-1.0}
+      MAX_LINKS_PER_MESSAGE: ${MAX_LINKS_PER_MESSAGE:-10}
+      MAX_PER_USER: ${MAX_PER_USER:-3}
+      JOB_RETRIES: ${JOB_RETRIES:-1}
+      JOB_RETRY_DELAY: ${JOB_RETRY_DELAY:-5}
+      LONG_JOB_NOTIFY: ${LONG_JOB_NOTIFY:-60}
+      PLAYLIST_MAX: ${PLAYLIST_MAX:-20}
+      CACHE_MAX: ${CACHE_MAX:-1000}
+
+      # --- yt-dlp updates and new-version notifications ---
+      # --- оновлення yt-dlp і сповіщення про нові версії бота ---
+      # GITHUB_REPO unset -> watch upstream; "off" -> no notifications.
+      # GITHUB_REPO не задано -> стежимо за апстрімом; "off" -> не сповіщати.
+      YTDLP_CHANNEL: ${YTDLP_CHANNEL:-master}
+      GITHUB_REPO: ${GITHUB_REPO:-}
+      GITHUB_BRANCH: ${GITHUB_BRANCH:-main}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+
+      # --- paths inside the container / шляхи всередині контейнера ---
+      STATS_DB: ${STATS_DB:-/data/stats.db}
+      INDEX_HTML_PATH: ${INDEX_HTML_PATH:-/app/index.html}
+    # Downloads are temporary and live in RAM (/tmp); the file_id cache sits
+    # on a persistent volume.
+    # Тимчасові завантаження — у RAM (/tmp), кеш file_id — на постійному volume.
+    tmpfs:
+      - /tmp:size=1g
+    volumes:
+      - botdata:/data
+      # Local Bot API storage (profile bigfiles): the bot reads files you send
+      # to the chat (e.g. cookies.txt) from here. Read-only.
+      # Сховище локального Bot API (профіль bigfiles): звідти бот читає файли,
+      # які ти надсилаєш у чат (напр. cookies.txt). Лише для читання.
+      - tgapi-data:/var/lib/telegram-bot-api:ro
+    # Cookies can simply be sent to the bot in private — it stores them in
+    # /data/cookies.txt itself. Mounting the file manually is optional:
+    # cookies можна просто надіслати боту в приват — він збереже їх у
+    # /data/cookies.txt сам. Монтувати файл вручну не обов'язково:
+    #   - ./cookies.txt:/app/cookies.txt:ro
+    # /health is for monitoring; autoheal restarts the container if the bot hangs.
+    # /health для моніторингу; autoheal перезапустить контейнер, якщо бот завис.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8080/health', timeout=3).status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Cobalt — self-hosted, handles Instagram and TikTok photo carousels
+  # (yt-dlp cannot do those). Listens on 9010 (NOT 9000, to avoid clashing with
+  # Portainer). No need to publish the port — the bot reaches it over the
+  # internal Docker network.
+  # Cobalt — self-hosted, займається Instagram і TikTok фото-каруселями
+  # (yt-dlp їх не вміє). Слухає на 9010 (НЕ 9000, щоб не конфліктувати
+  # з Portainer). Назовні порт публікувати не треба — бот ходить до нього
+  # по внутрішній мережі Docker.
+  cobalt-api:
+    image: ghcr.io/imputnet/cobalt:latest
+    container_name: cobalt-api
+    restart: unless-stopped
+    init: true
+    read_only: true            # hardening: read-only container filesystem
+                               # хардненіння: ФС контейнера лише для читання
+    environment:
+      API_URL: "http://cobalt-api:9010/"
+      API_PORT: "9010"
+    tmpfs:
+      - /tmp                    # Cobalt writes temp files here (the FS is read-only)
+                                # Cobalt пише тимчасові файли сюди
+    # Uncomment only if you want to reach Cobalt from the host directly
+    # (testing). Any free port will do, just not 9000:
+    # Розкоментуй, лише якщо хочеш звертатись до Cobalt із хоста напряму
+    # (тестування). Порт будь-який вільний, тільки не 9000:
+    # ports:
+    #   - "9010:9010"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # bgutil-provider — generates PO tokens for yt-dlp to get past YouTube
+  # protection ("Sign in to confirm you're not a bot" / 403). Internal, port 4416.
+  # bgutil-provider — генерує PO-токени для yt-dlp, щоб обходити YouTube-захист
+  # ("Sign in to confirm you're not a bot" / 403). Внутрішній сервіс, порт 4416.
+  bgutil-provider:
+    image: brainicism/bgutil-ytdlp-pot-provider:latest
+    container_name: bgutil-provider
+    restart: unless-stopped
+    init: true
+
+  # Autoheal — watches healthchecks and restarts containers marked "unhealthy"
+  # (for example when the bot hangs and /health stops answering).
+  # Autoheal — стежить за healthcheck і перезапускає контейнери зі статусом
+  # "unhealthy" (наприклад, якщо бот завис і /health перестав відповідати).
+  autoheal:
+    image: willfarrell/autoheal:latest
+    container_name: autoheal
+    restart: unless-stopped
+    environment:
+      AUTOHEAL_CONTAINER_LABEL: all
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  # Local Telegram Bot API — lifts the 50 MB limit to 2 GB. OPTIONAL: enabled
+  # with the bigfiles profile (COMPOSE_PROFILES=bigfiles) + api_id/api_hash.
+  # Локальний Telegram Bot API — знімає ліміт 50 МБ (до 2 ГБ). ОПЦІЙНИЙ:
+  # вмикається профілем bigfiles (COMPOSE_PROFILES=bigfiles) + api_id/api_hash.
+  telegram-bot-api:
+    image: aiogram/telegram-bot-api:latest
+    container_name: telegram-bot-api
+    restart: unless-stopped
+    profiles: ["bigfiles"]
+    environment:
+      TELEGRAM_API_ID: ${TELEGRAM_API_ID}
+      TELEGRAM_API_HASH: ${TELEGRAM_API_HASH}
+    volumes:
+      - tgapi-data:/var/lib/telegram-bot-api
+
+  # Cloudflare named tunnel — a STABLE HTTPS address on your own domain.
+  # OPTIONAL (profile miniapp). Create the tunnel in Cloudflare Zero Trust,
+  # copy the token into CLOUDFLARE_TUNNEL_TOKEN, and set the route
+  # (subdomain -> http://video-bot:8080) in the dashboard (Public Hostname).
+  # Cloudflare named tunnel — СТАЛА HTTPS-адреса на твоєму домені. ОПЦІЙНИЙ
+  # (профіль miniapp). Створи тунель у Cloudflare Zero Trust, скопіюй токен у
+  # CLOUDFLARE_TUNNEL_TOKEN, а маршрут (піддомен -> http://video-bot:8080)
+  # налаштуй у дашборді (Public Hostname).
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared
+    restart: unless-stopped
+    profiles: ["miniapp"]
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    # For a temporary address without a domain (quick tunnel) replace command with:
+    # Для тимчасової адреси без домену (quick tunnel) заміни рядок command на:
+    # command: tunnel --no-autoupdate --url http://video-bot:8080
+
+volumes:
+  botdata:
+  tgapi-data:

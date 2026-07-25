@@ -1,0 +1,133 @@
+# s.d.p downloader — LITE
+#
+# Two containers, zero configuration, nothing written to disk.
+# Drop the bot into a group and it downloads short videos from there. That's it.
+#
+# Два контейнери, нуль налаштувань, нічого не пишеться на диск.
+# Кинув бота в групу — він качає звідти короткі відео. І все.
+#
+# Start / запуск:
+#   docker compose -f docker-compose.lite.yml up -d
+# In Portainer: Stacks -> Add stack -> paste this file, add BOT_TOKEN
+# under Environment variables.
+# У Portainer: Stacks -> Add stack -> вставити цей файл, у Environment
+# variables додати BOT_TOKEN.
+#
+# Not included (and not needed): Mini App, local Bot API, tunnel, database, stats.
+# Немає (і не треба): Mini App, локального Bot API, тунелю, бази, статистики.
+# Need more? Switch to the full docker-compose.yml.
+# Потрібно більше — переходь на повний docker-compose.yml.
+
+services:
+  video-bot:
+    # Prebuilt image, nothing to compile. Override with SDP_IMAGE
+    # (:edge = current main, :v1.0 = a fixed version).
+    # Готовий образ, нічого збирати. Змінюється через SDP_IMAGE
+    # (:edge = поточний main, :v1.0 = фіксована версія).
+    image: ${SDP_IMAGE:-ghcr.io/tameyanderson/sdp-downloader:latest}
+    # build: .        # to build from source / щоб зібрати з коду
+    container_name: sdp-lite
+    restart: unless-stopped
+    depends_on:
+      - cobalt-api
+    environment:
+      # --- required / обов'язкове ---
+      BOT_TOKEN: ${BOT_TOKEN}
+
+      # --- mode / режим ---
+      LITE: "1"
+      # Groups the bot may work in: -1001234,-1005678. Empty = any group it is
+      # added to. A group tells you its id if you send /id there.
+      # Групи, де бот працює: -1001234,-1005678. Порожньо = будь-яка група,
+      # куди його додали. Свій id група покаже командою /id.
+      ALLOWED_CHATS: ${ALLOWED_CHATS:-}
+
+      # --- what to download / що качати ---
+      ENABLE_TIKTOK: ${ENABLE_TIKTOK:-1}
+      ENABLE_INSTAGRAM: ${ENABLE_INSTAGRAM:-1}
+      ENABLE_YOUTUBE: ${ENABLE_YOUTUBE:-1}
+      ENABLE_FACEBOOK: ${ENABLE_FACEBOOK:-0}
+      # Also send the video's audio track as a separate file.
+      # Окремим файлом надсилати ще й звукову доріжку відео.
+      AUDIO_TOO: ${AUDIO_TOO:-0}
+      # Post title as a caption: off | private | all.
+      # Підпис із назвою поста: off | private | all.
+      TITLES_MODE: ${TITLES_MODE:-off}
+      # Quality cap. Above 720 makes little sense: the limit here is 50 MB.
+      # Стеля якості. Вище 720 сенсу мало: ліміт Telegram тут 50 МБ.
+      MAX_HEIGHT: ${MAX_HEIGHT:-720}
+      # Bot message language: uk | en.
+      # Мова повідомлень бота: uk | en.
+      BOT_LANG: ${BOT_LANG:-uk}
+
+      # --- optional / за бажанням ---
+      # Proxy, in case your provider blocks something.
+      # Проксі, якщо провайдер щось ріже.
+      PROXY: ${PROXY:-}
+      # Instagram cookies: uncomment the volume below and keep this path.
+      # In LITE the file is read-only — it cannot be sent to the bot.
+      # Cookies для Instagram: розкоментуй volume нижче й лишай цей шлях.
+      # У LITE файл тільки читається — надіслати його боту не можна.
+      COOKIES_FILE: ${COOKIES_FILE:-}
+
+      # --- service / службове ---
+      COBALT_API_URL: http://cobalt-api:9010
+      # Empty because bgutil does not run in LITE (see the youtube profile below).
+      # Порожньо, бо bgutil у LITE не запускається (див. профіль youtube нижче).
+      POT_PROVIDER_URL: ${POT_PROVIDER_URL:-}
+      HEALTH_PORT: "8080"
+      # Update notifications land here. 0 = do not disturb.
+      # Сюди прийде сповіщення про нову версію бота. 0 = не турбувати.
+      ADMIN_ID: ${ADMIN_ID:-0}
+    # Temporary files live in RAM. Nothing is left on disk.
+    # Тимчасові файли — у пам'яті. На диску не лишається нічого.
+    tmpfs:
+      - /tmp:size=1g
+    # volumes:
+    #   - ./cookies.txt:/cookies.txt:ro     # + COOKIES_FILE=/cookies.txt
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8080/health', timeout=3).status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Cobalt — without it Instagram and TikTok photo carousels do not work.
+  # Nothing to configure, never exposed to the outside.
+  # Cobalt — без нього Instagram і фото-каруселі TikTok не працюють.
+  # Нічого налаштовувати не треба, назовні не публікується.
+  cobalt-api:
+    image: ghcr.io/imputnet/cobalt:latest
+    container_name: sdp-lite-cobalt
+    restart: unless-stopped
+    init: true
+    read_only: true
+    environment:
+      API_URL: "http://cobalt-api:9010/"
+      API_PORT: "9010"
+    tmpfs:
+      - /tmp
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Optional: PO tokens for YouTube. Enable with a profile if Shorts start
+  # failing with "Sign in to confirm you're not a bot":
+  # Опційно: PO-токени для YouTube. Вмикається профілем, якщо Shorts
+  # почнуть відмовляти з "Sign in to confirm you're not a bot":
+  #   docker compose -f docker-compose.lite.yml --profile youtube up -d
+  # then set POT_PROVIDER_URL=http://bgutil-provider:4416
+  # і додай POT_PROVIDER_URL=http://bgutil-provider:4416
+  bgutil-provider:
+    image: brainicism/bgutil-ytdlp-pot-provider:latest
+    container_name: sdp-lite-bgutil
+    restart: unless-stopped
+    init: true
+    profiles: ["youtube"]

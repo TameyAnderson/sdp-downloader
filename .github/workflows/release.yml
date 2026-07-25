@@ -1,0 +1,125 @@
+name: Publish image
+
+# Builds and publishes the container image to GitHub Container Registry.
+# Збирає й публікує образ у GitHub Container Registry.
+#
+#   push to main  -> ghcr.io/<owner>/sdp-downloader:edge
+#   tag v1.0      -> :v1.0, :1.0, :1, :latest  + a GitHub release
+#
+# Nothing to configure: GITHUB_TOKEN is provided by Actions itself.
+# Налаштовувати нічого не треба: GITHUB_TOKEN Actions видає сам.
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build:
+    name: Build and push
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: write        # для створення релізу на тег / to create the release
+      packages: write        # для публікації образу / to publish the image
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # arm64 теж збираємо: Raspberry Pi та ARM-VPS — типовий дім для self-hosted.
+      # arm64 too: Raspberry Pi and ARM VPS are a common self-hosted home.
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      # Docker accepts lowercase image names only, and a GitHub login may well
+      # contain capitals — so the name is lowercased here rather than assumed.
+      # Docker приймає назви образів лише в нижньому регістрі, а логін на GitHub
+      # цілком може мати великі літери — тому назва зводиться до нижнього тут.
+      - name: Work out the image name
+        id: img
+        run: |
+          echo "name=$(echo '${{ github.repository_owner }}/sdp-downloader' \
+            | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Work out the tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ steps.img.outputs.name }}
+          tags: |
+            type=semver,pattern=v{{version}}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=raw,value=edge,enable={{is_default_branch}}
+          labels: |
+            org.opencontainers.image.title=s.d.p downloader
+            org.opencontainers.image.description=Self-hosted Telegram bot for downloading video and audio
+            org.opencontainers.image.licenses=MIT
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Кеш шарів у самому реєстрі: наступні збірки — хвилини замість десятків.
+          # Layer cache in the registry itself: later builds take minutes, not tens.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke test the published image
+        run: |
+          IMAGE=$(echo "${{ steps.meta.outputs.tags }}" | head -n1)
+          echo "Testing $IMAGE"
+          # Образ має мати всі інструменти й запускати bot.py без падіння.
+          # The image must carry every tool and import bot.py without blowing up.
+          docker run --rm --entrypoint sh "$IMAGE" -c '
+            set -e
+            ffmpeg -version  > /dev/null
+            ffprobe -version > /dev/null
+            deno --version   > /dev/null
+            yt-dlp --version
+            python -c "import aiogram, aiohttp; print(\"aiogram\", aiogram.__version__)"
+            BOT_TOKEN=1:test python -c "
+          import importlib.util, os
+          os.environ.setdefault(\"STATS_DB\", \"/tmp/t.db\")
+          spec = importlib.util.spec_from_file_location(\"bot\", \"/app/bot.py\")
+          m = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(m)
+          print(\"services:\", len(m.SERVICES), \"| i18n keys:\", len(m.T[\"uk\"]))
+          "'
+
+      - name: Create the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          body: |
+            ## Install
+
+            ```bash
+            curl -O https://raw.githubusercontent.com/${{ github.repository }}/main/docker-compose.lite.yml
+            curl -o .env https://raw.githubusercontent.com/${{ github.repository }}/main/.env.lite.example
+            # put your BOT_TOKEN into .env
+            docker compose -f docker-compose.lite.yml up -d
+            ```
+
+            Full edition (Mini App panel, 2 GB files): use `docker-compose.yml`
+            and `.env.example` instead.
+
+            Image: `ghcr.io/${{ steps.img.outputs.name }}:${{ github.ref_name }}`
+            (linux/amd64, linux/arm64)
