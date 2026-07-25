@@ -1,0 +1,1009 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>s.d.p downloader</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700&family=Open+Sans:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0c0e13;
+      --bg2: #11141b;
+      --card: #191d26;
+      --card2: #222734;
+      --line: rgba(255,255,255,.07);
+      --text: #ffffff;
+      --muted: #82a0a8;
+      --navy: #001F3F;
+      --blue: #2f8fe0;
+      --green: #4caf50;
+      --orange: #FC8544;
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    body {
+      margin: 0; padding: 0 14px 84px; background: var(--bg); color: var(--text);
+      font-family: 'Open Sans', -apple-system, sans-serif;
+    }
+    h1, .sect, .nav span, button, .mode { font-family: 'Montserrat', sans-serif; }
+    .header { text-align: center; padding: 20px 2px 14px; }
+    .logo-txt { line-height: 1; }
+    .logo-txt .sdp { display: block; font-family: 'Montserrat'; font-weight: 700;
+      font-size: 34px; letter-spacing: 1px; color: #5c7ed0; }
+    .logo-txt .dl2 { display: block; font-family: 'Montserrat'; font-weight: 600;
+      font-size: 15px; letter-spacing: 1.5px; color: var(--muted); margin-top: 3px; }
+    .page { display: none; } .page.active { display: block; }
+    .card { background: var(--card); border-radius: 15px; padding: 14px; margin-bottom: 12px;
+      border: 1px solid var(--line); }
+    label { font-size: 13px; color: var(--muted); display: block; margin-bottom: 9px; }
+    textarea, input, select {
+      width: 100%; border: none; border-radius: 11px; padding: 12px; font-size: 15px;
+      background: var(--bg2); color: var(--text); font-family: 'Open Sans', sans-serif;
+    }
+    textarea { min-height: 76px; resize: vertical; }
+    input:focus, textarea:focus, select:focus { outline: 2px solid var(--blue); }
+    .modes { display: flex; gap: 8px; }
+    .mode { flex: 1; text-align: center; padding: 11px; border-radius: 11px; cursor: pointer;
+      background: var(--bg2); color: var(--muted); font-size: 14px; font-weight: 600;
+      user-select: none; border: 2px solid transparent; }
+    .mode.active { color: #fff; border-color: var(--blue); background: rgba(47,143,224,.12); }
+    button.go { width: 100%; padding: 14px; border: none; border-radius: 12px; cursor: pointer;
+      background: var(--blue); color: #fff; font-size: 15px; font-weight: 700; letter-spacing: .3px; }
+    button.go:disabled { opacity: .5; }
+    button.sm { padding: 9px 11px; border: none; border-radius: 9px; background: var(--blue);
+      color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; font-family: 'Open Sans'; }
+    button.del { background: rgba(252,133,68,.2); color: var(--orange); }
+    button.sm.off { background: rgba(130,160,168,.16); color: var(--muted); }
+    #status { margin-top: 12px; font-size: 14px; min-height: 18px; color: var(--muted); text-align: center; }
+    #status.ok { color: var(--green); } #status.err { color: var(--orange); }
+    .hint { font-size: 12px; color: var(--muted); margin-top: 7px; }
+    .sect { font-weight: 700; font-size: 18px; margin: 18px 2px 10px; }
+    .dl { display: flex; align-items: center; gap: 11px; background: var(--card);
+      border: 1px solid var(--line); border-radius: 14px; padding: 10px; margin-bottom: 10px; }
+    .thumb { width: 56px; height: 56px; border-radius: 10px; background: var(--card2);
+      flex: 0 0 auto; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+    .thumb svg { width: 24px; height: 24px; fill: var(--muted); }
+    .dl-info { flex: 1; min-width: 0; }
+    .dl-type { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 5px; }
+    .dl-name { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden;
+      text-overflow: ellipsis; margin: 2px 0; }
+    .dl-sub { font-size: 12px; color: var(--muted); }
+    .dl-info .bar-bg { margin: 6px 0 5px; }
+    .st { font-size: 12px; font-weight: 600; white-space: nowrap; flex: 0 0 auto; align-self: flex-end; }
+    .st.ok { color: var(--green); } .st.err { color: var(--orange); } .st.go { color: var(--blue); }
+    .stat-big { display: flex; gap: 8px; } .stat-big .card { flex: 1; text-align: center; }
+    .stat-num { font-family: 'Montserrat'; font-size: 24px; font-weight: 700; }
+    .row { display: flex; justify-content: space-between; align-items: center; gap: 8px;
+      padding: 7px 0; font-size: 13px; }
+    .muted { color: var(--muted); font-size: 12px; }
+    .empty { color: var(--muted); text-align: center; padding: 18px 0; font-size: 13px; }
+    .refresh { float: right; font-size: 12px; color: var(--blue); cursor: pointer; }
+    .seg { display: flex; gap: 6px; }
+    .seg .opt { flex: 1; text-align: center; padding: 9px; border-radius: 9px; background: var(--bg2);
+      color: var(--muted); font-size: 14px; cursor: pointer; border: 2px solid transparent; }
+    .seg .opt.on { color: #fff; border-color: var(--blue); }
+    .frm { display: flex; gap: 6px; margin-top: 8px; } .frm > * { flex: 1; }
+    .qgrid { display: flex; gap: 6px; }
+    .qgrid select { flex: 1; }
+    .prev { background: var(--card2); border: 1px solid var(--line); border-radius: 12px;
+      padding: 11px; margin-top: 10px; font-size: 13px; }
+    .prev .t { font-weight: 600; margin-bottom: 3px; }
+    .redo { background: rgba(47,143,224,.18); color: #7cbef2; border: none;
+      border-radius: 8px; padding: 5px 9px; font-size: 12px; cursor: pointer;
+      font-family: 'Open Sans'; margin-top: 5px; }
+    .tun { display: flex; justify-content: space-between; align-items: center;
+      gap: 10px; padding: 7px 0; font-size: 13px; }
+    .tun label { margin: 0; color: var(--text); font-size: 13px; flex: 1; }
+    .tun .sub { display: block; color: var(--muted); font-size: 11px; margin-top: 2px; }
+    .tun input { width: 82px; flex: 0 0 82px; text-align: center; padding: 8px; }
+    .ckbox { background: var(--bg2); border: 1px solid var(--line); border-radius: 12px;
+      padding: 12px; margin-top: 10px; }
+    .ckhead { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 10px; }
+    .ckmeta { color: var(--muted); font-size: 12px; margin-top: 5px; line-height: 1.5; }
+    .bar-bg { height: 6px; background: rgba(255,255,255,.08); border-radius: 4px; overflow: hidden; }
+    .bar-fill { height: 6px; background: var(--blue); border-radius: 4px; transition: width .4s ease; }
+    .bottomnav { position: fixed; left: 0; right: 0; bottom: 0; display: flex;
+      background: var(--bg2); border-top: 1px solid var(--line); padding: 8px 0 max(8px, env(safe-area-inset-bottom)); z-index: 10; }
+    .nav { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
+      color: var(--muted); cursor: pointer; user-select: none; }
+    .nav svg { width: 22px; height: 22px; fill: currentColor; }
+    .nav span { font-size: 11px; font-weight: 600; }
+    .nav.active { color: var(--blue); }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo-txt"><span class="sdp">s.d.p</span><span class="dl2">downloader</span></div>
+  </div>
+
+  <!-- HOME -->
+  <div class="page active" id="page-home">
+    <div class="card">
+      <label data-i18n="mode_label">Режим</label>
+      <div class="modes">
+        <div class="mode active" data-mode="video" data-i18n="mode_video">🎬 Відео</div>
+        <div class="mode" data-mode="audio" data-i18n="mode_audio">🎵 MP3</div>
+      </div>
+    </div>
+    <div class="card">
+      <label data-i18n="paste_label">Вставте посилання (можна кілька, кожне з нового рядка)</label>
+      <textarea id="url" placeholder="TikTok / YouTube / Instagram / Facebook…"></textarea>
+      <div class="hint" data-i18n="ext_hint">MP3 і повне YouTube — для розширеного доступу.</div>
+      <div class="hint" data-i18n="trim_hint">Обрізка: додай час у кінці, напр. 0:10-0:30. Плейлисти YouTube — цілком (до ліміту).</div>
+      <div id="preview-inline"></div>
+    </div>
+    <div class="card">
+      <label data-i18n="quality_label">Якість / бітрейт</label>
+      <div class="qgrid">
+        <select id="q-video">
+          <option value="" data-i18n="q_auto">Авто</option>
+          <option value="2160">4K (2160p)</option>
+          <option value="1440">2K (1440p)</option>
+          <option value="1080">1080p</option>
+          <option value="720">720p</option>
+          <option value="480">480p</option>
+          <option value="360">360p</option>
+        </select>
+        <select id="q-abr">
+          <option value="" data-i18n="abr_auto">MP3: найкращий</option>
+          <option value="320">MP3: 320 kbps</option>
+          <option value="192">MP3: 192 kbps</option>
+          <option value="128">MP3: 128 kbps</option>
+        </select>
+      </div>
+      <div class="hint" data-i18n="quality_hint">Якість діє на відео, бітрейт — на MP3. Якщо потрібної якості немає, візьметься найближча нижча.</div>
+    </div>
+    <div id="preview-box"></div>
+    <button class="go" id="go" data-i18n="dl_btn">ЗАВАНТАЖИТИ ↓</button>
+    <div id="status"></div>
+  </div>
+
+  <!-- ACTIVITY -->
+  <div class="page" id="page-activity">
+    <div class="sect"><span data-i18n="recent_title">Останні завантаження</span><span class="refresh" id="refresh-act" data-i18n="refresh">↻ Оновити</span></div>
+    <div id="live"></div>
+    <div id="activity"><div class="empty">…</div></div>
+  </div>
+
+  <!-- STATS -->
+  <div class="page" id="page-stats">
+    <div class="sect" data-i18n="stats_title">Статистика</div>
+    <div class="stat-big">
+      <div class="card"><div class="stat-num" id="s-total">–</div><div class="muted" data-i18n="total">усього</div></div>
+      <div class="card"><div class="stat-num" id="s-ok" style="color:var(--green)">–</div><div class="muted" data-i18n="ok">успішно</div></div>
+      <div class="card"><div class="stat-num" id="s-fail" style="color:var(--orange)">–</div><div class="muted" data-i18n="fail">помилок</div></div>
+    </div>
+    <div class="card"><span class="muted" data-i18n="by_source">За джерелами</span><div id="by-source" style="margin-top:8px"></div></div>
+    <div class="card"><span class="muted" data-i18n="by_chat">За чатами</span><div id="by-chat" style="margin-top:8px"></div></div>
+  </div>
+
+  <!-- SETTINGS -->
+  <div class="page" id="page-settings">
+    <div class="sect" data-i18n="settings_title">Налаштування</div>
+    <div id="settings-body">
+      <div class="card">
+        <label data-i18n="lang_label">Мова інтерфейсу</label>
+        <select id="lang-sel">
+          <option value="uk">Українська</option>
+          <option value="en">English</option>
+        </select>
+      </div>
+      <div class="card">
+        <div class="row" style="padding:0">
+          <span data-i18n="wl_label">Білий список чатів</span>
+          <div class="seg" style="width:120px"><div class="opt" data-wl="1" data-i18n="on">Увімк</div><div class="opt" data-wl="0" data-i18n="off">Вимк</div></div>
+        </div>
+        <div class="hint" data-i18n="wl_hint">Вимкнено — бот працює в будь-якому чаті. Увімкнено — тільки в чатах зі списку; у приваті відповідає лише адміну.</div>
+      </div>
+      <div class="card">
+        <div class="row" style="padding:0">
+          <span data-i18n="notify_label">Повідомляти про відсутність доступу</span>
+          <div class="seg" style="width:120px"><div class="opt" data-notify="1" data-i18n="yes">Так</div><div class="opt" data-notify="0" data-i18n="no">Ні</div></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="row" style="padding:0">
+          <span data-i18n="cache_label">Кешувати завантаження</span>
+          <div class="seg" style="width:120px"><div class="opt" data-cache="1" data-i18n="yes">Так</div><div class="opt" data-cache="0" data-i18n="no">Ні</div></div>
+        </div>
+        <div class="hint" data-i18n="cache_hint">Зберігає file_id, щоб повторні посилання надсилались миттєво.</div>
+        <div class="hint" id="cache-info"></div>
+          <div class="tun"><label data-i18n="tl_cache_max">Скільки записів тримати<span class="sub" data-i18n="tl_cache_max_s">старі витісняються</span></label><input type="number" id="t-cache_max" min="10" max="100000"></div>
+          <div class="tun"><label data-i18n="tl_cache_clear_days">Чистити раз на N днів<span class="sub" data-i18n="tl_cache_clear_days_s">0 — не чистити</span></label><input type="number" id="t-cache_clear_days" min="0" max="365"></div>
+        <button class="go" id="cache-clear" style="margin-top:10px" data-i18n="cache_clear">Очистити кеш зараз</button>
+        <div class="hint" id="cache-status" style="text-align:center"></div>
+      </div>
+      <div class="card">
+        <div class="row" style="padding:0;cursor:pointer" id="beh-toggle">
+          <span data-i18n="beh_label">Якість і поведінка</span>
+          <span class="muted" id="beh-arrow">▾</span>
+        </div>
+        <div class="hint" data-i18n="beh_hint">Стеля якості, плейлисти й перевірки. Діють одразу, без перезапуску.</div>
+        <div id="beh-list" style="display:none;margin-top:10px">
+          <div class="tun"><label data-i18n="tl_max_height">Стеля якості коротких відео, p<span class="sub" data-i18n="tl_max_height_s">TikTok, Reels, Shorts</span></label><input type="number" id="t-max_height" min="240" max="4320"></div>
+          <div class="tun"><label data-i18n="tl_long_max_height">Стеля довгих відео, p<span class="sub" data-i18n="tl_long_max_height_s">4320 · 2160 · 1440 · 1080</span></label><input type="number" id="t-long_max_height" min="360" max="4320"></div>
+          <div class="tun"><label data-i18n="tl_long_min_height">Нижня межа довгих відео, p<span class="sub" data-i18n="tl_long_min_height_s">нижче не опускається</span></label><input type="number" id="t-long_min_height" min="144" max="4320"></div>
+          <div class="tun"><label data-i18n="tl_playlist_max">Роликів з плейлиста<span class="sub" data-i18n="tl_playlist_max_s">решта ігнорується</span></label><input type="number" id="t-playlist_max" min="1" max="100"></div>
+          <div class="tun"><label data-i18n="tl_long_job_notify">Писати «готово» після N секунд<span class="sub" data-i18n="tl_long_job_notify_s">0 — не писати</span></label><input type="number" id="t-long_job_notify" min="0" max="600"></div>
+          <div class="row" style="padding:8px 0 0"><span data-i18n="fl_thumbnails">Мініатюри до відео</span>
+            <div class="seg" style="width:120px"><div class="opt" data-flag="thumbnails" data-val="1" data-i18n="yes">Так</div><div class="opt" data-flag="thumbnails" data-val="0" data-i18n="no">Ні</div></div></div>
+          <div class="row" style="padding:8px 0 0"><span data-i18n="fl_verify">Перевіряти файл перед відправкою</span>
+            <div class="seg" style="width:120px"><div class="opt" data-flag="verify_media" data-val="1" data-i18n="yes">Так</div><div class="opt" data-flag="verify_media" data-val="0" data-i18n="no">Ні</div></div></div>
+          <div class="row" style="padding:8px 0 0"><span data-i18n="fl_deep">Глибока перевірка (повний декод)</span>
+            <div class="seg" style="width:120px"><div class="opt" data-flag="verify_deep" data-val="1" data-i18n="yes">Так</div><div class="opt" data-flag="verify_deep" data-val="0" data-i18n="no">Ні</div></div></div>
+          <div class="hint" data-i18n="verify_hint">Перевірка відсіює биті й німі файли. Вимикай лише щоб зрозуміти, чому щось відхилило.</div>
+          <button class="go" id="beh-save" style="margin-top:10px" data-i18n="save">Зберегти</button>
+          <div id="beh-status" class="hint" style="text-align:center"></div>
+        </div>
+      </div>
+      <div class="card">
+        <label data-i18n="engines_label">Рушії</label>
+        <div class="row" style="padding:6px 0 0"><span>Cobalt</span>
+          <div class="seg" style="width:120px"><div class="opt" data-flag="eng_cobalt" data-val="1" data-i18n="on">Увімк</div><div class="opt" data-flag="eng_cobalt" data-val="0" data-i18n="off">Вимк</div></div></div>
+        <div class="row" style="padding:6px 0 0"><span>tikwm</span>
+          <div class="seg" style="width:120px"><div class="opt" data-flag="eng_tikwm" data-val="1" data-i18n="on">Увімк</div><div class="opt" data-flag="eng_tikwm" data-val="0" data-i18n="off">Вимк</div></div></div>
+        <div class="hint" data-i18n="engines_hint">Cobalt — Instagram/Facebook і страховка. tikwm — фото й каруселі TikTok. Вимикай, лише якщо рушій зламався.</div>
+      </div>
+      <div class="card">
+        <label data-i18n="engine_label">Рушій для Instagram / Facebook</label>
+        <div class="seg" id="eng-seg">
+          <div class="opt" data-eng="auto" data-i18n="eng_auto">Авто</div>
+          <div class="opt" data-eng="cobalt">Cobalt</div>
+          <div class="opt" data-eng="ytdlp">yt-dlp</div>
+        </div>
+        <div class="hint" data-i18n="engine_hint">«Авто»: є cookies — першим іде yt-dlp (краща якість), немає — Cobalt.</div>
+      </div>
+      <div class="card">
+        <label data-i18n="ck_title">Cookies Instagram</label>
+        <div id="ck-box" class="ckbox"></div>
+        <div class="tun" style="margin-top:10px">
+          <label data-i18n="ck_warn_label">Попередити за N днів до кінця<span class="sub" data-i18n="ck_warn_sub">0 — не нагадувати</span></label>
+          <input type="number" id="t-cookies_warn_days" min="0" max="60">
+        </div>
+        <button class="go" id="ck-save" data-i18n="save">Зберегти</button>
+        <div class="hint" data-i18n="ck_send_hint">Щоб оновити — надішли файл cookies.txt боту в приват.</div>
+      </div>
+      <div class="card">
+        <label data-i18n="backup_label">Резервна копія</label>
+        <div class="hint" data-i18n="backup_hint">Копія бази зі статистикою, налаштуваннями та білими списками. Бот надішле файл тобі в приват.</div>
+        <button class="go" id="bk-send" style="margin-top:10px" data-i18n="backup_btn">Зробити копію</button>
+        <div class="hint" id="bk-status" style="text-align:center"></div>
+      </div>
+      <div class="card">
+        <div class="row" style="padding:0;cursor:pointer" id="tun-toggle">
+          <span data-i18n="limits_label">Навантаження та ліміти</span>
+          <span class="muted" id="tun-arrow">▾</span>
+        </div>
+        <div class="hint" data-i18n="limits_hint">Діють одразу, без перезапуску. Порожнє поле = значення з env.</div>
+        <div id="tun-list" style="display:none;margin-top:10px">
+          <div class="tun"><label data-i18n="tl_max_links">Силок з одного повідомлення<span class="sub" data-i18n="tl_max_links_s">решта ігнорується</span></label><input type="number" id="t-max_links" min="1" max="50"></div>
+          <div class="tun"><label data-i18n="tl_per_user">Паралельних завантажень на юзера<span class="sub" data-i18n="tl_per_user_s">решта чекає в черзі</span></label><input type="number" id="t-max_per_user" min="1" max="20"></div>
+          <div class="tun"><label data-i18n="tl_interval">Пауза між відправками в чат, с<span class="sub" data-i18n="tl_interval_s">проти ліміту Telegram 20/хв</span></label><input type="number" id="t-chat_interval" min="0" max="10" step="0.1"></div>
+          <div class="tun"><label data-i18n="tl_flood">Повторів при ліміті Telegram (429)<span class="sub" data-i18n="tl_flood_s">чекає і надсилає знову</span></label><input type="number" id="t-flood_retries" min="0" max="20"></div>
+          <div class="tun"><label data-i18n="tl_job">Повторів завдання при збої<span class="sub" data-i18n="tl_job_s">мережа/таймаут</span></label><input type="number" id="t-job_retries" min="0" max="5"></div>
+          <div class="tun"><label data-i18n="tl_job_delay">Пауза перед повтором завдання, с<span class="sub" data-i18n="tl_job_delay_s"></span></label><input type="number" id="t-job_retry_delay" min="0" max="60" step="1"></div>
+          <div class="tun"><label data-i18n="tl_cob">Спроб Cobalt<span class="sub" data-i18n="tl_cob_s">Instagram часто віддає нормальний файл з другої</span></label><input type="number" id="t-cobalt_retries" min="1" max="5"></div>
+          <div class="tun"><label data-i18n="tl_cob_delay">Пауза між спробами Cobalt, с<span class="sub" data-i18n="tl_cob_delay_s"></span></label><input type="number" id="t-cobalt_retry_delay" min="0" max="30" step="0.5"></div>
+          <div class="tun"><label data-i18n="tl_max_concurrent">Паралельних завантажень усього<span class="sub" data-i18n="tl_max_concurrent_s">спільна черга бота</span></label><input type="number" id="t-max_concurrent" min="1" max="32"></div>
+          <div class="tun"><label data-i18n="tl_frag_concurrency">Потоків на файл<span class="sub" data-i18n="tl_frag_concurrency_s">більше — швидше, але помітніше</span></label><input type="number" id="t-frag_concurrency" min="1" max="16"></div>
+          <div class="tun"><label data-i18n="tl_check_minutes">Перевіряти оновлення раз на N хвилин<span class="sub" data-i18n="tl_check_minutes_s">0 — не перевіряти</span></label><input type="number" id="t-check_minutes" min="0" max="10080"></div>
+          <div class="row" style="padding:8px 0 0"><span data-i18n="fl_sleep">Паузи між запитами yt-dlp</span>
+            <div class="seg" style="width:120px"><div class="opt" data-flag="ytdlp_sleep" data-val="1" data-i18n="yes">Так</div><div class="opt" data-flag="ytdlp_sleep" data-val="0" data-i18n="no">Ні</div></div></div>
+          <div class="hint" data-i18n="sleep_hint">Паузи знижують ризик тимчасового блокування, але завантаження стає повільнішим.</div>
+          <button class="go" id="tun-save" style="margin-top:10px" data-i18n="save">Зберегти</button>
+          <div id="tun-status" class="hint" style="text-align:center"></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="row" style="padding:0;cursor:pointer" id="svc-toggle">
+          <span data-i18n="services_label">Сервіси (платформи)</span>
+          <span class="muted" id="svc-arrow">▾</span>
+        </div>
+        <div class="hint" data-i18n="services_hint">Нові сервіси вимкнені. Увімкни те, що треба.</div>
+        <div id="svc-list" style="display:none;margin-top:8px"></div>
+      </div>
+      <div class="card">
+        <label data-i18n="titles_label">Назва відео / поста</label>
+        <div class="seg" id="tit-seg">
+          <div class="opt" data-titles="off" data-i18n="tit_off">Не слати</div>
+          <div class="opt" data-titles="private" data-i18n="tit_priv">Лише в приват</div>
+          <div class="opt" data-titles="all" data-i18n="tit_all">Скрізь</div>
+        </div>
+        <div class="hint" data-i18n="titles_hint">Назва додається підписом до файлу. У групах може бути зайвою — тоді лишай «Лише в приват».</div>
+      </div>
+      <div class="card">
+        <div class="row" style="padding:0">
+          <span data-i18n="audio_too_label">Трек окремим MP3</span>
+          <div class="seg" style="width:120px"><div class="opt" data-audiotoo="1" data-i18n="yes">Так</div><div class="opt" data-audiotoo="0" data-i18n="no">Ні</div></div>
+        </div>
+        <div class="hint" data-i18n="audio_too_hint">До коротких відео (TikTok, Reels, Shorts) додатково надсилається звукова доріжка окремим файлом.</div>
+      </div>
+      <div class="card">
+        <label data-i18n="add_chat">Додати чат</label>
+        <div class="frm">
+          <input id="acc-ident" data-i18n-ph="ph_chat" placeholder="id чату (напр. -100123…)">
+          <button class="sm" id="acc-add" style="flex:0 0 auto" data-i18n="add">Додати</button>
+        </div>
+        <div class="hint" data-i18n="wl_note">Дізнатись id: додай бота в чат і надішли там /id. Назва підтягнеться сама, коли в чаті щось завантажать.</div>
+      </div>
+      <div class="card">
+        <span class="muted" data-i18n="access_list_title">Чати у списку</span>
+        <div id="acc-list" style="margin-top:8px"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BOTTOM NAV -->
+  <nav class="bottomnav">
+    <div class="nav active" data-page="home"><svg viewBox="0 0 24 24"><path d="M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg><span data-i18n="nav_home">Головна</span></div>
+    <div class="nav" data-page="activity"><svg viewBox="0 0 24 24"><path d="M13 2L4.5 13H11l-1 9 8.5-11H12l1-9z"/></svg><span data-i18n="nav_activity">Активність</span></div>
+    <div class="nav" data-page="stats"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="4" height="9" rx="1"/><rect x="10" y="6" width="4" height="14" rx="1"/><rect x="17" y="14" width="4" height="6" rx="1"/></svg><span data-i18n="nav_stats">Статистика</span></div>
+    <div class="nav" data-page="settings"><svg viewBox="0 0 24 24"><path d="M12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7zM19.4 13a7.5 7.5 0 0 0 0-2l2-1.5-2-3.5-2.4 1a7.6 7.6 0 0 0-1.7-1L15 3H9l-.4 2.6a7.6 7.6 0 0 0-1.7 1l-2.4-1-2 3.5L2.6 11a7.5 7.5 0 0 0 0 2l-2 1.5 2 3.5 2.4-1a7.6 7.6 0 0 0 1.7 1L9 21h6l.4-2.6a7.6 7.6 0 0 0 1.7-1l2.4 1 2-3.5z"/></svg><span data-i18n="nav_settings">Налаштування</span></div>
+  </nav>
+
+  <script>
+    const tg = window.Telegram ? window.Telegram.WebApp : null;
+    if (tg) { tg.ready(); tg.expand(); }
+    const initData = tg ? tg.initData : "";
+
+    // ---- i18n ----
+    const I = {
+      uk: {
+        mode_label:"Режим", mode_video:"🎬 Відео", mode_audio:"🎵 MP3",
+        paste_label:"Вставте посилання (можна кілька, кожне з нового рядка)",
+        ext_hint:"MP3 і повне YouTube — для розширеного доступу.",
+        trim_hint:"Обрізка: додай час у кінці, напр. 0:10-0:30. Плейлисти YouTube — цілком (до ліміту).",
+        dl_btn:"ЗАВАНТАЖИТИ ↓", recent_title:"Останні завантаження", refresh:"↻ Оновити",
+        quality_label:"Якість / бітрейт", q_auto:"Авто", abr_auto:"MP3: найкращий",
+        quality_hint:"Якість діє на відео, бітрейт — на MP3. Якщо потрібної якості немає, візьметься найближча нижча.",
+        checking:"Дивлюсь…", nope:"Не вдалось дізнатись",
+        redo:"↻ Ще раз", redo_sent:"✅ У черзі",
+        stats_title:"Статистика", total:"усього", ok:"успішно", fail:"помилок",
+        by_source:"За джерелами", by_chat:"За чатами",
+        settings_title:"Налаштування", lang_label:"Мова інтерфейсу",
+        wl_label:"Білий список чатів", on:"Увімк", off:"Вимк",
+        beh_label:"Якість і поведінка",
+        beh_hint:"Стеля якості, плейлисти й перевірки. Діють одразу, без перезапуску.",
+        tl_max_height:"Стеля якості коротких відео, p", tl_max_height_s:"TikTok, Reels, Shorts",
+        tl_long_max_height:"Стеля довгих відео, p", tl_long_max_height_s:"4320 · 2160 · 1440 · 1080",
+        tl_long_min_height:"Нижня межа довгих відео, p", tl_long_min_height_s:"нижче не опускається",
+        tl_playlist_max:"Роликів з плейлиста", tl_playlist_max_s:"решта ігнорується",
+        tl_long_job_notify:"Писати «готово» після N секунд", tl_long_job_notify_s:"0 — не писати",
+        tl_max_concurrent:"Паралельних завантажень усього", tl_max_concurrent_s:"спільна черга бота",
+        tl_frag_concurrency:"Потоків на файл", tl_frag_concurrency_s:"більше — швидше, але помітніше",
+        tl_check_minutes:"Перевіряти оновлення раз на N хвилин", tl_check_minutes_s:"0 — не перевіряти",
+        tl_cache_max:"Скільки записів тримати", tl_cache_max_s:"старі витісняються",
+        tl_cache_clear_days:"Чистити раз на N днів", tl_cache_clear_days_s:"0 — не чистити",
+        cache_clear:"Очистити кеш зараз", cache_cleared:"Очищено записів: {n}",
+        cache_size:"Займає: {n} з {max} записів · {size}", cache_empty:"Кеш порожній",
+        fl_thumbnails:"Мініатюри до відео", fl_verify:"Перевіряти файл перед відправкою",
+        fl_deep:"Глибока перевірка (повний декод)", fl_sleep:"Паузи між запитами yt-dlp",
+        verify_hint:"Перевірка відсіює биті й німі файли. Вимикай лише щоб зрозуміти, чому щось відхилило.",
+        sleep_hint:"Паузи знижують ризик тимчасового блокування, але завантаження стає повільнішим.",
+        engines_label:"Рушії",
+        engines_hint:"Cobalt — Instagram/Facebook і страховка. tikwm — фото й каруселі TikTok. Вимикай, лише якщо рушій зламався.",
+        wl_hint:"Вимкнено — бот працює в будь-якому чаті. Увімкнено — тільки в чатах зі списку; у приваті відповідає лише адміну.",
+        add_chat:"Додати чат", wl_bad:"Потрібен id чату — число, зазвичай з мінусом.",
+        notify_label:"Повідомляти про відсутність доступу", yes:"Так", no:"Ні",
+        cache_label:"Кешувати завантаження",
+        cache_hint:"Зберігає file_id, щоб повторні посилання надсилались миттєво.",
+        engine_label:"Рушій для Instagram / Facebook", eng_auto:"Авто",
+        engine_hint:"«Авто»: є cookies — першим іде yt-dlp (краща якість), немає — Cobalt.",
+        titles_label:"Назва відео / поста", tit_off:"Не слати", tit_priv:"Лише в приват", tit_all:"Скрізь",
+        titles_hint:"Назва додається підписом до файлу. У групах може бути зайвою — тоді лишай «Лише в приват».",
+        audio_too_label:"Трек окремим MP3",
+        audio_too_hint:"До коротких відео (TikTok, Reels, Shorts) додатково надсилається звукова доріжка окремим файлом.",
+        wl_note:"Додавання через @username діє для приватного чату з ботом. Керування панеллю лишається тільки в адміна.",
+        backup_label:"Резервна копія",
+        backup_hint:"Копія бази зі статистикою, налаштуваннями та білими списками. Бот надішле файл тобі в приват.",
+        backup_btn:"Зробити копію", backup_wait:"Готую копію…",
+        backup_sent:"Готово — файл у чаті з ботом ({kb} КБ)", backup_none:"Бази ще немає — нічого копіювати.",
+        ck_title:"Cookies Instagram",
+        ck_warn_label:"Попередити за N днів до кінця", ck_warn_sub:"0 — не нагадувати",
+        ck_send_hint:"Щоб оновити — надішли файл cookies.txt боту в приват.",
+        ck_on:"Активні", ck_soon:"Скоро спливуть", ck_dead:"Протерміновані", ck_off:"Не підключені",
+        ck_days:"лишилось ~{d} дн.", ck_none:"без терміну",
+        ck_upd:"оновлено", ck_keys:"ключі",
+        ck_off_hint:"Доступні лише публічні пости. Надішли cookies.txt боту в приват.",
+        limits_label:"Навантаження та ліміти",
+        limits_hint:"Діють одразу, без перезапуску. Порожнє поле = значення з env.",
+        tl_max_links:"Силок з одного повідомлення", tl_max_links_s:"решта ігнорується",
+        tl_per_user:"Паралельних завантажень на юзера", tl_per_user_s:"решта чекає в черзі",
+        tl_interval:"Пауза між відправками в чат, с", tl_interval_s:"проти ліміту Telegram 20/хв",
+        tl_flood:"Повторів при ліміті Telegram (429)", tl_flood_s:"чекає і надсилає знову",
+        tl_job:"Повторів завдання при збої", tl_job_s:"мережа/таймаут",
+        tl_job_delay:"Пауза перед повтором завдання, с", tl_job_delay_s:"",
+        tl_cob:"Спроб Cobalt", tl_cob_s:"Instagram часто віддає нормальний файл з другої",
+        tl_cob_delay:"Пауза між спробами Cobalt, с", tl_cob_delay_s:"",
+        save:"Зберегти", saved:"✅ Збережено",
+        services_label:"Сервіси (платформи)",
+        services_hint:"Нові сервіси вимкнені. Увімкни те, що треба.",
+        add_access:"Додати доступ", user:"Користувач", chat:"Чат",
+        basic:"Базовий", extended:"Розширений", add:"Додати",
+        level_hint:"Базовий — короткі відео/каруселі. Розширений — ще повне YouTube і MP3. Для чату рівень діє на всіх учасників.",
+        access_list_title:"Чати у списку",
+        nav_home:"Головна", nav_activity:"Активність", nav_stats:"Статистика", nav_settings:"Налаштування",
+        need_link:"Встав хоча б одне посилання", open_via_bot:"Відкрий через кнопку бота",
+        sending:"Надсилаю в чергу…", queued:"✅ У черзі: ", no_access_s:"⛔ Немає доступу",
+        need_ext:"⛔ Повне YouTube — лише для розширеного доступу", err_prefix:"Помилка: ",
+        no_contact:"Не вдалося зв'язатися з ботом",
+        admin_only:"Доступно лише адміну", empty_recent:"Поки порожньо",
+        done:"Готово ✅", failed:"Помилка ⚠️",
+        ago_s:"с тому", ago_m:"хв тому", ago_h:"год тому", ago_d:"д тому",
+        no_data:"Немає даних", empty_list:"Список порожній", chat_w:"чат",
+        ph_chat:"id чату (напр. -100123…)",
+        lbl_carousel:"TikTok каруселі", lbl_audio:"MP3 (аудіо)", lbl_other:"Інше",
+        st_queued:"У черзі", st_toobig:"Завелике", eta:"⏱"
+      },
+      en: {
+        mode_label:"Mode", mode_video:"🎬 Video", mode_audio:"🎵 MP3",
+        paste_label:"Paste link(s) — one per line",
+        ext_hint:"MP3 and full YouTube — for extended access.",
+        trim_hint:"Trim: add a time range at the end, e.g. 0:10-0:30. YouTube playlists download in full (up to the limit).",
+        dl_btn:"DOWNLOAD ↓", recent_title:"Recent downloads", refresh:"↻ Refresh",
+        quality_label:"Quality / bitrate", q_auto:"Auto", abr_auto:"MP3: best",
+        quality_hint:"Quality applies to video, bitrate to MP3. If the exact quality is missing, the closest lower one is used.",
+        checking:"Checking…", nope:"Couldn't fetch info",
+        redo:"↻ Again", redo_sent:"✅ Queued",
+        stats_title:"Statistics", total:"total", ok:"succeeded", fail:"failed",
+        by_source:"By source", by_chat:"By chat",
+        settings_title:"Settings", lang_label:"Interface language",
+        wl_label:"Chat whitelist", on:"On", off:"Off",
+        beh_label:"Quality & behaviour",
+        beh_hint:"Quality caps, playlists and integrity checks. Applied instantly, no restart.",
+        tl_max_height:"Short video quality cap, p", tl_max_height_s:"TikTok, Reels, Shorts",
+        tl_long_max_height:"Long video cap, p", tl_long_max_height_s:"4320 · 2160 · 1440 · 1080",
+        tl_long_min_height:"Long video floor, p", tl_long_min_height_s:"never goes below",
+        tl_playlist_max:"Items per playlist", tl_playlist_max_s:"the rest is skipped",
+        tl_long_job_notify:"Say “done” after N seconds", tl_long_job_notify_s:"0 — never",
+        tl_max_concurrent:"Parallel downloads in total", tl_max_concurrent_s:"shared queue",
+        tl_frag_concurrency:"Threads per file", tl_frag_concurrency_s:"faster, but more visible",
+        tl_check_minutes:"Check for updates every N minutes", tl_check_minutes_s:"0 — never",
+        tl_cache_max:"Entries to keep", tl_cache_max_s:"oldest are dropped",
+        tl_cache_clear_days:"Wipe every N days", tl_cache_clear_days_s:"0 — never",
+        cache_clear:"Clear cache now", cache_cleared:"Entries cleared: {n}",
+        cache_size:"Using: {n} of {max} entries · {size}", cache_empty:"Cache is empty",
+        fl_thumbnails:"Video thumbnails", fl_verify:"Verify the file before sending",
+        fl_deep:"Deep check (full decode)", fl_sleep:"Pauses between yt-dlp requests",
+        verify_hint:"Verification rejects broken and silent files. Turn it off only to see why something was rejected.",
+        sleep_hint:"Pauses lower the risk of a temporary block, but downloads get slower.",
+        engines_label:"Engines",
+        engines_hint:"Cobalt — Instagram/Facebook and the safety net. tikwm — TikTok photos and carousels. Turn one off only when it breaks.",
+        wl_hint:"Off — the bot works in any chat. On — only in listed chats; in private it answers the admin only.",
+        add_chat:"Add a chat", wl_bad:"A chat id is required — a number, usually negative.",
+        notify_label:"Notify about missing access", yes:"Yes", no:"No",
+        cache_label:"Cache downloads",
+        cache_hint:"Stores file_id so repeated links send instantly.",
+        engine_label:"Engine for Instagram / Facebook", eng_auto:"Auto",
+        engine_hint:"“Auto”: with cookies yt-dlp goes first (better quality), without them Cobalt.",
+        titles_label:"Video / post title", tit_off:"Don't send", tit_priv:"Private only", tit_all:"Everywhere",
+        titles_hint:"The title is attached as a file caption. In groups it can be noise — keep “Private only” then.",
+        audio_too_label:"Soundtrack as separate MP3",
+        audio_too_hint:"For short videos (TikTok, Reels, Shorts) the audio track is also sent as its own file.",
+        wl_note:"Adding by @username applies to the private chat with the bot. Panel control stays admin-only.",
+        backup_label:"Backup",
+        backup_hint:"A copy of the database: stats, settings and access lists. The bot sends the file to you in private.",
+        backup_btn:"Make a backup", backup_wait:"Preparing…",
+        backup_sent:"Done — the file is in your chat with the bot ({kb} KB)", backup_none:"No database yet — nothing to back up.",
+        ck_title:"Instagram cookies",
+        ck_warn_label:"Warn N days before expiry", ck_warn_sub:"0 — never remind",
+        ck_send_hint:"To refresh — send a cookies.txt file to the bot in private.",
+        ck_on:"Active", ck_soon:"Expiring soon", ck_dead:"Expired", ck_off:"Not connected",
+        ck_days:"~{d} days left", ck_none:"no expiry",
+        ck_upd:"updated", ck_keys:"keys",
+        ck_off_hint:"Only public posts are available. Send cookies.txt to the bot in private.",
+        limits_label:"Load & limits",
+        limits_hint:"Applied instantly, no restart. Empty field = value from env.",
+        tl_max_links:"Links per message", tl_max_links_s:"the rest are ignored",
+        tl_per_user:"Parallel downloads per user", tl_per_user_s:"the rest wait in queue",
+        tl_interval:"Delay between sends to a chat, s", tl_interval_s:"against Telegram's 20/min limit",
+        tl_flood:"Retries on Telegram limit (429)", tl_flood_s:"waits and sends again",
+        tl_job:"Job retries on failure", tl_job_s:"network/timeout",
+        tl_job_delay:"Delay before a job retry, s", tl_job_delay_s:"",
+        tl_cob:"Cobalt attempts", tl_cob_s:"Instagram often serves a good file on the 2nd",
+        tl_cob_delay:"Delay between Cobalt attempts, s", tl_cob_delay_s:"",
+        save:"Save", saved:"✅ Saved",
+        services_label:"Services (platforms)",
+        services_hint:"New services are off. Enable what you need.",
+        add_access:"Grant access", user:"User", chat:"Chat",
+        basic:"Basic", extended:"Extended", add:"Add",
+        level_hint:"Basic — short videos/carousels. Extended — also full YouTube and MP3. For a chat the level applies to all members.",
+        access_list_title:"Listed chats",
+        nav_home:"Home", nav_activity:"Activity", nav_stats:"Statistics", nav_settings:"Settings",
+        need_link:"Paste at least one link", open_via_bot:"Open via the bot button",
+        sending:"Queuing…", queued:"✅ Queued: ", no_access_s:"⛔ No access",
+        need_ext:"⛔ Full YouTube — extended access only", err_prefix:"Error: ",
+        no_contact:"Couldn't reach the bot",
+        admin_only:"Admin only", empty_recent:"Nothing yet",
+        done:"Done ✅", failed:"Failed ⚠️",
+        ago_s:"s ago", ago_m:"m ago", ago_h:"h ago", ago_d:"d ago",
+        no_data:"No data", empty_list:"List is empty", chat_w:"chat",
+        ph_chat:"chat id (e.g. -100123…)",
+        lbl_carousel:"TikTok carousel", lbl_audio:"MP3 (audio)", lbl_other:"Other",
+        st_queued:"Queued", st_toobig:"Too large", eta:"⏱"
+      }
+    };
+    let LANG = "uk";
+    const tr = k => (I[LANG] || I.uk)[k] || I.uk[k] || k;
+    const trf = (k, v) => tr(k).replace(/\{(\w+)\}/g, (_, n) => (v[n] !== undefined ? v[n] : ""));
+    function applyI18n() {
+      document.documentElement.lang = LANG;
+      const _ls = document.getElementById("lang-sel"); if (_ls) _ls.value = LANG;
+      document.querySelectorAll("[data-i18n]").forEach(el => { el.textContent = tr(el.dataset.i18n); });
+      document.querySelectorAll("[data-i18n-ph]").forEach(el => { el.placeholder = tr(el.dataset.i18nPh); });
+    }
+
+    function redrawAll() {
+      // applyI18n() чіпає лише [data-i18n]. Усе, що малюється в JS — картка
+      // cookies, історія, статистика, сервіси, розмір кешу — лишалося б
+      // старою мовою до перезавантаження. Тому перемальовуємо явно.
+      [loadSettings, loadStats, loadActivity, loadProgress].forEach(fn => {
+        try { fn(); } catch (e) {}
+      });
+      const svc = document.getElementById("svc-list");
+      if (svc && svc.style.display !== "none") loadServices();
+    }
+
+    const SRCMAP = { youtube_video:"YouTube", youtube_shorts:"YouTube Shorts", tiktok_video:"TikTok",
+      instagram:"Instagram", facebook:"Facebook" };
+    function lbl(s) {
+      if (SRCMAP[s]) return SRCMAP[s];
+      if (s === "tiktok_carousel") return tr("lbl_carousel");
+      if (s === "audio") return tr("lbl_audio");
+      return tr("lbl_other");
+    }
+    const okS = s => s === "sent" || s === "sent_silent";
+    const typeOf = s => s === "audio" ? "Audio" : (s === "tiktok_carousel" ? "Image" : "Video");
+    const ICON = {
+      Audio: '<svg viewBox="0 0 24 24"><path d="M12 3a7 7 0 0 0-7 7v5a2 2 0 0 0 2 2h1v-6H7v-1a5 5 0 0 1 10 0v1h-1v6h1a2 2 0 0 0 2-2v-5a7 7 0 0 0-7-7z"/></svg>',
+      Image: '<svg viewBox="0 0 24 24"><path d="M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zm2 10l3-3 2 2 3-4 3 5z"/><circle cx="8" cy="9" r="1.5"/></svg>',
+      Video: '<svg viewBox="0 0 24 24"><path d="M4 5h11a1 1 0 0 1 1 1v3l4-2v10l-4-2v3a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/></svg>'
+    };
+
+    function fmtSize(b) {
+      if (!b) return "";
+      const u = ["B", "KB", "MB", "GB"];
+      let i = 0, v = b;
+      while (v >= 1024 && i < 3) { v /= 1024; i++; }
+      return (v < 10 ? v.toFixed(1) : Math.round(v)) + " " + u[i];
+    }
+    function fmtEta(sec) {
+      if (sec == null) return "";
+      sec = Math.max(0, Math.round(sec));
+      const S = LANG === "uk" ? "с" : "s", M = LANG === "uk" ? "хв" : "m", H = LANG === "uk" ? "год" : "h";
+      if (sec < 60) return sec + S;
+      const m = Math.floor(sec / 60), s = sec % 60;
+      if (m < 60) return m + M + (s ? " " + s + S : "");
+      return Math.floor(m / 60) + H + " " + (m % 60) + M;
+    }
+    function fmtSpeed(bps) {
+      if (!bps) return "";
+      const u = LANG === "uk" ? ["Б/с","КБ/с","МБ/с","ГБ/с"] : ["B/s","KB/s","MB/s","GB/s"];
+      let i = 0, v = bps;
+      while (v >= 1024 && i < 3) { v /= 1024; i++; }
+      return (v < 10 ? v.toFixed(1) : Math.round(v)) + " " + u[i];
+    }
+    function fillThumbs(container) {
+      container.querySelectorAll("[data-thumb]").forEach(async el => {
+        const fid = el.dataset.thumb;
+        if (!fid) return;
+        try {
+          const r = await fetch("/api/thumb?id=" + encodeURIComponent(fid), { headers: { "X-Telegram-Init-Data": initData } });
+          if (!r.ok) return;
+          const b = await r.blob();
+          el.style.backgroundImage = "url(" + URL.createObjectURL(b) + ")";
+          el.style.backgroundSize = "cover";
+          el.style.backgroundPosition = "center";
+          el.innerHTML = "";
+        } catch (e) {}
+      });
+    }
+
+    // ---- navigation ----
+    let progTimer = null, prevActive = 0;
+    function stopProg() { if (progTimer) clearInterval(progTimer); progTimer = null; }
+    function startProg() { stopProg(); loadProgress(); progTimer = setInterval(loadProgress, 1500); }
+    document.querySelectorAll(".nav").forEach(n => n.addEventListener("click", () => {
+      document.querySelectorAll(".nav").forEach(x => x.classList.remove("active"));
+      document.querySelectorAll(".page").forEach(x => x.classList.remove("active"));
+      n.classList.add("active");
+      document.getElementById("page-" + n.dataset.page).classList.add("active");
+      window.scrollTo(0, 0);
+      if (n.dataset.page === "activity") { loadActivity(); startProg(); } else { stopProg(); }
+      if (n.dataset.page === "stats") loadStats();
+      if (n.dataset.page === "settings") loadSettings();
+    }));
+
+    // ---- download ----
+    let mode = "video";
+    document.querySelectorAll(".mode").forEach(el => el.addEventListener("click", () => {
+      document.querySelectorAll(".mode").forEach(m => m.classList.remove("active"));
+      el.classList.add("active"); mode = el.dataset.mode;
+    }));
+    const statusEl = document.getElementById("status"), goBtn = document.getElementById("go");
+    const setStatus = (msg, c) => { statusEl.textContent = msg; statusEl.className = c || ""; };
+    goBtn.addEventListener("click", async () => {
+      const url = document.getElementById("url").value.trim();
+      if (!url) return setStatus(tr("need_link"), "err");
+      if (!initData) return setStatus(tr("open_via_bot"), "err");
+      goBtn.disabled = true; setStatus(tr("sending"));
+      try {
+        const r = await fetch("/api/download", { method:"POST", headers:{"Content-Type":"application/json"},
+          body: JSON.stringify({ initData, url, mode,
+            quality: document.getElementById("q-video").value,
+            abr: document.getElementById("q-abr").value }) });
+        const d = await r.json();
+        if (d.ok) {
+          setStatus(tr("queued") + d.queued, "ok"); document.getElementById("url").value = "";
+          previewFor = ""; renderPreview("");
+          if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
+          document.querySelector('.nav[data-page="activity"]').click();
+        }
+        else if (d.error === "no_access") setStatus(tr("no_access_s"), "err");
+        else if (d.error === "need_extended") setStatus(tr("need_ext"), "err");
+        else setStatus(tr("err_prefix") + (d.error || "?"), "err");
+      } catch (e) { setStatus(tr("no_contact"), "err"); }
+      finally { goBtn.disabled = false; }
+    });
+
+    function fmtDur(s) {
+      if (!s) return "";
+      s = Math.round(s);
+      const h = Math.floor(s/3600), m = Math.floor((s%3600)/60), x = s%60;
+      return (h ? h + ":" + String(m).padStart(2,"0") : m) + ":" + String(x).padStart(2,"0");
+    }
+    // Preview appears on its own shortly after a link is pasted.
+    let previewTimer = null, previewFor = "";
+    const urlBox = document.getElementById("url");
+    function renderPreview(html) {
+      document.getElementById("preview-inline").innerHTML = html;
+    }
+    async function autoPreview() {
+      const raw = urlBox.value.trim();
+      const m = raw.match(/https?:\/\/\S+/);
+      if (!m) { previewFor = ""; renderPreview(""); return; }
+      const url = m[0];
+      if (url === previewFor) return;      // already shown for this link
+      previewFor = url;
+      renderPreview(`<div class="prev">${tr("checking")}</div>`);
+      const d = await apiGet("/api/preview?url=" + encodeURIComponent(url));
+      if (previewFor !== url) return;      // the field changed meanwhile
+      if (!d || !d.ok || !d.info) { renderPreview(`<div class="prev">${tr("nope")}</div>`); return; }
+      const i = d.info;
+      const bits = [];
+      if (i.duration) bits.push(fmtDur(i.duration));
+      if (i.size) bits.push(fmtSize(i.size));
+      if (i.uploader) bits.push(i.uploader);
+      renderPreview(`<div class="prev"><div class="t">${(i.title||"—")}</div>`
+        + `<div class="muted">${bits.join(" · ")}</div></div>`);
+    }
+    urlBox.addEventListener("input", () => {
+      clearTimeout(previewTimer);
+      previewTimer = setTimeout(autoPreview, 600);
+    });
+    urlBox.addEventListener("paste", () => {
+      clearTimeout(previewTimer);
+      previewTimer = setTimeout(autoPreview, 250);
+    });
+    async function redo(url) {
+      const r = await fetch("/api/download", { method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ initData, url, mode: "video" }) });
+      const d = await r.json();
+      if (d.ok) {
+        if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
+        setStatus(tr("redo_sent"), "ok");
+        startProg();
+      } else setStatus(tr("err_prefix") + (d.error || "?"), "err");
+    }
+    window.redo = redo;
+    async function apiGet(p) {
+      const r = await fetch(p, { headers: { "X-Telegram-Init-Data": initData } });
+      if (r.status === 403) return { forbidden: true };
+      return r.json();
+    }
+    async function apiPost(p, body) {
+      const r = await fetch(p, { method:"POST", headers:{ "Content-Type":"application/json", "X-Telegram-Init-Data": initData },
+        body: JSON.stringify(body) });
+      if (r.status === 403) return { forbidden: true };
+      return r.json();
+    }
+    function ago(ts) {
+      const s = Math.floor(Date.now()/1000 - ts);
+      if (s < 60) return s + tr("ago_s");
+      if (s < 3600) return Math.floor(s/60) + tr("ago_m");
+      if (s < 86400) return Math.floor(s/3600) + tr("ago_h");
+      return Math.floor(s/86400) + tr("ago_d");
+    }
+
+    // ---- live progress ----
+    async function loadProgress() {
+      const box = document.getElementById("live");
+      const d = await apiGet("/api/progress");
+      if (d.forbidden || !d.ok) { box.innerHTML = ""; return; }
+      const jobs = d.jobs || [];
+      const active = jobs.filter(j => j.status === "downloading" || j.status === "queued").length;
+      if (active < prevActive) loadActivity();
+      prevActive = active;
+      if (!jobs.length) { box.innerHTML = ""; return; }
+      box.innerHTML = jobs.map(j => {
+        const type = j.mode === "audio" ? "Audio" : "Video";
+        let right = "", bar = "", sub = "";
+        if (j.status === "downloading") {
+          const pct = j.pct != null ? j.pct : 0;
+          right = `<div class="st go">${Math.round(pct)}%</div>`;
+          bar = `<div class="bar-bg"><div class="bar-fill" style="width:${pct}%"></div></div>`;
+          const parts = [];
+          if (j.eta != null) parts.push(tr("eta") + " " + fmtEta(j.eta));
+          if (j.speed) parts.push(fmtSpeed(j.speed));
+          sub = parts.join(" · ");
+        } else if (j.status === "queued") {
+          right = `<div class="st go">${tr("st_queued")}</div>`;
+        } else if (j.status === "done") {
+          right = `<div class="st ok">${tr("done")}</div>`; bar = `<div class="bar-bg"><div class="bar-fill" style="width:100%"></div></div>`;
+        } else if (j.status === "toobig") {
+          right = `<div class="st err">${tr("st_toobig")}</div>`;
+        } else {
+          right = `<div class="st err">${tr("failed")}</div>`;
+        }
+        return `<div class="dl"><div class="thumb">${ICON[type]}</div>
+          <div class="dl-info"><div class="dl-type">${type}</div>
+          <div class="dl-name">${lbl(j.source)}</div>
+          ${bar}${sub ? `<div class="dl-sub">${sub}</div>` : ""}</div>${right}</div>`;
+      }).join("");
+    }
+
+    // ---- history ----
+    async function loadActivity() {
+      const box = document.getElementById("activity");
+      const d = await apiGet("/api/events?limit=30");
+      if (d.forbidden) { box.innerHTML = `<div class="empty">${tr("admin_only")}</div>`; return; }
+      if (!d.ok || !d.events.length) { box.innerHTML = `<div class="empty">${tr("empty_recent")}</div>`; return; }
+      box.innerHTML = d.events.map(e => {
+        const type = typeOf(e.source), ok = okS(e.status);
+        const size = e.size ? fmtSize(e.size) + " · " : "";
+        return `<div class="dl">
+          <div class="thumb"${e.thumb_id ? ` data-thumb="${e.thumb_id}"` : ""}>${ICON[type]}</div>
+          <div class="dl-info">
+            <div class="dl-type">${type}</div>
+            <div class="dl-name">${lbl(e.source)}</div>
+            <div class="dl-sub">${size}${e.chat_title||"—"} · ${e.via} · ${ago(e.ts)}</div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px">
+            <div class="st ${ok?"ok":"err"}">${ok?tr("done"):tr("failed")}</div>
+            ${e.url ? `<button class="redo" onclick="redo('${e.url.replace(/'/g, "")}')">${tr("redo")}</button>` : ""}
+          </div>
+        </div>`;
+      }).join("");
+      fillThumbs(box);
+    }
+    document.getElementById("refresh-act").addEventListener("click", () => { loadActivity(); loadProgress(); });
+
+    // ---- stats ----
+    function bars(rows, box) {
+      if (!rows.length) { box.innerHTML = `<div class="empty">${tr("no_data")}</div>`; return; }
+      const max = Math.max(...rows.map(r => r.c));
+      box.innerHTML = rows.map(r => `<div style="margin:8px 0">
+        <div class="row" style="padding:2px 0"><span>${r.name?r.name:lbl(r.source)}${r.chat_type?' <span class="muted">('+r.chat_type+')</span>':''}</span><span class="muted">${r.c}</span></div>
+        <div class="bar-bg"><div class="bar-fill" style="width:${Math.round(r.c/max*100)}%"></div></div></div>`).join("");
+    }
+    async function loadStats() {
+      const d = await apiGet("/api/stats");
+      if (d.forbidden) { document.getElementById("by-source").innerHTML = `<div class="empty">${tr("admin_only")}</div>`; document.getElementById("by-chat").innerHTML = ""; return; }
+      if (!d.ok) return;
+      const s = d.stats;
+      document.getElementById("s-total").textContent = s.total;
+      document.getElementById("s-ok").textContent = s.ok;
+      document.getElementById("s-fail").textContent = s.fail;
+      bars(s.by_source, document.getElementById("by-source"));
+      bars(s.by_chat, document.getElementById("by-chat"));
+    }
+
+    // ---- settings ----
+    document.getElementById("lang-sel").addEventListener("change", async (e) => {
+      LANG = e.target.value;
+      applyI18n();
+      await apiPost("/api/settings", { lang: LANG });
+      redrawAll();
+    });
+    document.querySelectorAll("[data-wl]").forEach(o => o.addEventListener("click", async () => {
+      await apiPost("/api/settings", { whitelist: o.dataset.wl }); loadSettings();
+    }));
+    document.querySelectorAll("[data-notify]").forEach(o => o.addEventListener("click", async () => {
+      await apiPost("/api/settings", { notify_no_access: o.dataset.notify }); loadSettings();
+    }));
+    document.querySelectorAll("[data-cache]").forEach(o => o.addEventListener("click", async () => {
+      await apiPost("/api/settings", { cache: o.dataset.cache }); loadSettings();
+    }));
+    function renderCookies(info) {
+      const box = document.getElementById("ck-box");
+      if (!box) return;
+      if (!info || !info.present) {
+        box.innerHTML = `<div class="ckhead"><span class="dot" style="background:var(--muted)"></span>`
+          + `<span>${tr("ck_off")}</span></div>`
+          + `<div class="ckmeta">${tr("ck_off_hint")}</div>`;
+        return;
+      }
+      const map = { ok:["var(--green)", tr("ck_on")],
+                    soon:["#e0b02f", tr("ck_soon")],
+                    expired:["var(--orange)", tr("ck_dead")] };
+      const [color, label] = map[info.state] || map.ok;
+      const left = info.days === null || info.days === undefined
+        ? tr("ck_none")
+        : (info.state === "expired" ? tr("ck_dead") : tr("ck_days").replace("{d}", info.days));
+      const bits = [];
+      if (info.sites && info.sites.length) bits.push(info.sites.join(", "));
+      if (info.keys && info.keys.length) bits.push(tr("ck_keys") + ": " + info.keys.join(", "));
+      if (info.updated) bits.push(tr("ck_upd") + " " + ago(info.updated));
+      box.innerHTML = `<div class="ckhead"><span class="dot" style="background:${color}"></span>`
+        + `<span>${label}</span><span class="muted" style="margin-left:auto">${left}</span></div>`
+        + `<div class="ckmeta">${bits.join(" · ")}</div>`;
+    }
+    document.getElementById("ck-save").addEventListener("click", async () => {
+      const el = document.getElementById("t-cookies_warn_days");
+      if (!el || el.value === "") return;
+      await apiPost("/api/settings", { cookies_warn_days: Number(el.value) });
+      if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
+      loadSettings();
+    });
+    document.querySelectorAll("[data-eng]").forEach(o => o.addEventListener("click", async () => {
+      await apiPost("/api/settings", { engine_pref: o.dataset.eng }); loadSettings();
+    }));
+    document.querySelectorAll("[data-titles]").forEach(o => o.addEventListener("click", async () => {
+      await apiPost("/api/settings", { titles_mode: o.dataset.titles }); loadSettings();
+    }));
+    document.querySelectorAll("[data-audiotoo]").forEach(o => o.addEventListener("click", async () => {
+      await apiPost("/api/settings", { audio_too: o.dataset.audiotoo }); loadSettings();
+    }));
+    const TUN_KEYS = ["max_links","max_per_user","chat_interval","flood_retries",
+                      "job_retries","job_retry_delay","cobalt_retries","cobalt_retry_delay",
+                      "max_concurrent","frag_concurrency","check_minutes"];
+    const BEH_KEYS = ["max_height","long_max_height","long_min_height",
+                      "playlist_max","long_job_notify","cache_max","cache_clear_days"];
+    document.querySelectorAll("[data-flag]").forEach(o => o.addEventListener("click", async () => {
+      const body = {}; body[o.dataset.flag] = o.dataset.val;
+      await apiPost("/api/settings", body); loadSettings();
+    }));
+    function fold(btn, list, arrow) {
+      document.getElementById(btn).addEventListener("click", () => {
+        const box = document.getElementById(list);
+        const open = box.style.display === "none";
+        box.style.display = open ? "block" : "none";
+        document.getElementById(arrow).textContent = open ? "\u25B4" : "\u25BE";
+      });
+    }
+    fold("beh-toggle", "beh-list", "beh-arrow");
+    async function saveNums(keys, statusId) {
+      const body = {};
+      keys.forEach(k => {
+        const el = document.getElementById("t-" + k);
+        if (el && el.value !== "") body[k] = Number(el.value);
+      });
+      const st = document.getElementById(statusId);
+      const r = await apiPost("/api/settings", body);
+      st.textContent = r && r.ok ? tr("saved") : tr("err_prefix");
+      if (tg && tg.HapticFeedback && r && r.ok) tg.HapticFeedback.notificationOccurred("success");
+      setTimeout(() => { st.textContent = ""; }, 2500);
+      loadSettings();
+    }
+    document.getElementById("beh-save").addEventListener("click", () => saveNums(BEH_KEYS, "beh-status"));
+    document.getElementById("bk-send").addEventListener("click", async () => {
+      const btn = document.getElementById("bk-send");
+      const st = document.getElementById("bk-status");
+      btn.disabled = true; st.textContent = tr("backup_wait");
+      try {
+        const r = await apiPost("/api/backup", {});
+        if (r && r.ok) {
+          st.textContent = trf("backup_sent", { kb: r.kb });
+          if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
+        } else {
+          st.textContent = r && r.error === "no_db" ? tr("backup_none") : tr("err_prefix");
+        }
+      } catch (e) { st.textContent = tr("err_prefix"); }
+      btn.disabled = false;
+      setTimeout(() => { st.textContent = ""; }, 6000);
+    });
+    document.getElementById("cache-clear").addEventListener("click", async () => {
+      const st = document.getElementById("cache-status");
+      const r = await apiPost("/api/cache/clear", {});
+      st.textContent = r && r.ok ? trf("cache_cleared", { n: r.cleared }) : tr("err_prefix");
+      if (r && r.ok) loadSettings();
+      setTimeout(() => { st.textContent = ""; }, 3000);
+    });
+    document.getElementById("tun-toggle").addEventListener("click", () => {
+      const box = document.getElementById("tun-list");
+      const open = box.style.display === "none";
+      box.style.display = open ? "block" : "none";
+      document.getElementById("tun-arrow").textContent = open ? "\u25B4" : "\u25BE";
+    });
+    document.getElementById("tun-save").addEventListener("click", () => saveNums(TUN_KEYS, "tun-status"));
+    document.getElementById("svc-toggle").addEventListener("click", () => {
+      const box = document.getElementById("svc-list");
+      const open = box.style.display === "none";
+      box.style.display = open ? "block" : "none";
+      document.getElementById("svc-arrow").textContent = open ? "\u25B4" : "\u25BE";
+      if (open) loadServices();
+    });
+    async function loadServices() {
+      const box = document.getElementById("svc-list");
+      const d = await apiGet("/api/services");
+      if (d.forbidden) { box.innerHTML = `<div class="empty">${tr("admin_only")}</div>`; return; }
+      if (!d.ok) return;
+      box.innerHTML = d.services.map(s => {
+        const tier = s.tier === "extended" ? tr("extended") : tr("basic");
+        return `<div class="row" style="border-top:1px solid var(--line)">
+          <div><div style="font-weight:600">${s.label}</div><div class="muted">${tier}</div></div>
+          <div class="seg" style="width:110px">
+            <div class="opt ${s.enabled?"on":""}" data-svc="${s.id}" data-val="1">${tr("yes")}</div>
+            <div class="opt ${s.enabled?"":"on"}" data-svc="${s.id}" data-val="0">${tr("no")}</div>
+          </div></div>`;
+      }).join("");
+    }
+    document.getElementById("svc-list").addEventListener("click", async e => {
+      const o = e.target.closest("[data-svc]"); if (!o) return;
+      await apiPost("/api/settings", { ["svc:" + o.dataset.svc]: o.dataset.val });
+      loadServices();
+    });
+    document.getElementById("acc-add").addEventListener("click", async () => {
+      const el = document.getElementById("acc-ident");
+      const ident = (el.value || "").trim().replace(/\s/g, "");
+      if (!/^-?\d+$/.test(ident)) { el.placeholder = tr("wl_bad"); el.value = ""; return; }
+      await apiPost("/api/access", { ident });
+      el.value = "";
+      loadSettings();
+    });
+    async function removeAccess(ident) { await apiPost("/api/access", { action:"remove", ident }); loadSettings(); }
+    window.removeAccess = removeAccess;
+    async function loadSettings() {
+      const s = await apiGet("/api/settings");
+      const body = document.getElementById("settings-body");
+      if (s.forbidden) { body.innerHTML = `<div class="empty">${tr("admin_only")}</div>`; return; }
+      if (!s.ok) return;
+      const st = s.settings;
+      if (st.lang && st.lang !== LANG) { LANG = st.lang; applyI18n(); }
+      const _ls2 = document.getElementById("lang-sel"); if (_ls2) _ls2.value = LANG;
+      document.querySelectorAll("[data-wl]").forEach(o => o.classList.toggle("on", o.dataset.wl === (st.whitelist || "0")));
+      document.querySelectorAll("[data-notify]").forEach(o => o.classList.toggle("on", o.dataset.notify === st.notify_no_access));
+      document.querySelectorAll("[data-cache]").forEach(o => o.classList.toggle("on", o.dataset.cache === st.cache));
+      document.querySelectorAll("[data-eng]").forEach(o => o.classList.toggle("on", o.dataset.eng === (st.engine_pref || "auto")));
+      document.querySelectorAll("[data-titles]").forEach(o => o.classList.toggle("on", o.dataset.titles === (st.titles_mode || "private")));
+      document.querySelectorAll("[data-audiotoo]").forEach(o => o.classList.toggle("on", o.dataset.audiotoo === (st.audio_too || "0")));
+      renderCookies(st.cookies_info);
+      if (st.tunables && st.tunables.cookies_warn_days !== undefined) {
+        const w = document.getElementById("t-cookies_warn_days");
+        if (w) w.value = st.tunables.cookies_warn_days;
+      }
+      if (st.tunables) TUN_KEYS.concat(BEH_KEYS).forEach(k => {
+        const el = document.getElementById("t-" + k);
+        if (el && st.tunables[k] !== undefined) el.value = st.tunables[k];
+      });
+      const ci = st.cache_info;
+      const cbox = document.getElementById("cache-info");
+      if (cbox && ci) {
+        cbox.textContent = ci.entries
+          ? trf("cache_size", { n: ci.entries, max: ci.max, size: fmtSize(ci.bytes) })
+          : tr("cache_empty");
+      }
+      const fl = st.flags || {};
+      document.querySelectorAll("[data-flag]").forEach(o => {
+        o.classList.toggle("on", o.dataset.val === (fl[o.dataset.flag] || "0"));
+      });
+      const a = await apiGet("/api/access");
+      const box = document.getElementById("acc-list");
+      if (!a.ok || !a.access.length) { box.innerHTML = `<div class="empty">${tr("empty_list")}</div>`; return; }
+      box.innerHTML = a.access.map(r => { const id = r.ident.replace(/'/g,""); return `<div class="row" style="border-top:1px solid var(--line)">
+        <div><div style="font-weight:600">${r.label || tr("chat_w")}</div><div class="muted">${r.ident}</div></div>
+        <button class="sm del" onclick="removeAccess('${id}')">✕</button>
+        </div>`; }).join("");
+    }
+
+    // ---- init ----
+    (async () => {
+      try { const d = await apiGet("/api/lang"); if (d.ok && d.lang) LANG = d.lang; } catch (e) {}
+      applyI18n();
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+# Telegram bot framework / Фреймворк для Telegram-бота
+aiogram==3.30.0
+
+# The downloader itself. Pinned here, but the container can pull a fresher
+# build at startup — see AUTO_UPGRADE_YTDLP and YTDLP_CHANNEL.
+# Власне завантажувач. Версія зафіксована, але контейнер може підтягнути
+# свіжішу збірку при старті — див. AUTO_UPGRADE_YTDLP і YTDLP_CHANNEL.
+yt-dlp==2026.7.4
+
+# PO token provider for getting past YouTube protection
+# (works together with the bgutil-provider container).
+# Провайдер PO-токенів для обходу YouTube-захисту
+# (працює в парі з контейнером bgutil-provider).
+bgutil-ytdlp-pot-provider

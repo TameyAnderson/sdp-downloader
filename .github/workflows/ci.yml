@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  tests:
+    name: Тести та перевірки
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Залежності
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyyaml
+
+      - name: Компіляція Python
+        run: python -m compileall -q bot.py tests
+
+      - name: Тести
+        working-directory: tests
+        run: python -m unittest discover -s . -p "test_*.py" -v
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Синтаксис JS у Mini App
+        run: |
+          python - <<'PY'
+          import re, pathlib
+          html = pathlib.Path("index.html").read_text(encoding="utf-8")
+          js = re.search(r"<script>(.*)</script>", html, re.S)
+          assert js, "не знайшов <script> в index.html"
+          pathlib.Path("/tmp/app.js").write_text(js.group(1), encoding="utf-8")
+          PY
+          node --check /tmp/app.js
+
+      - name: Збірка образу
+        run: docker build -t sdp-downloader:ci .
+
+      - name: Обидва стеки валідні
+        run: |
+          docker compose -f docker-compose.yml config --quiet
+          docker compose -f docker-compose.lite.yml config --quiet
+        env:
+          BOT_TOKEN: dummy

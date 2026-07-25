@@ -1,0 +1,147 @@
+# -*- coding: utf-8 -*-
+"""Живі параметри: значення з панелі мають діяти одразу і не вилітати за межі."""
+import unittest
+
+from helper import load_bot
+
+
+class TestTunables(unittest.TestCase):
+    def setUp(self):
+        self.bot = load_bot()
+        self.bot.db_init()
+        self.bot.settings_load_sync()
+
+    def live(self, key, value):
+        self.bot.set_setting_sync(key, value)
+        self.bot.settings_load_sync()
+
+    def test_every_knob_is_clamped(self):
+        for key, (env_default, _cast, lo, hi) in self.bot.TUNABLES.items():
+            with self.subTest(key=key):
+                self.live(key, hi + 1000)
+                self.assertEqual(self.bot.tunable(key), hi, "%s: стеля не тримає" % key)
+                self.live(key, lo - 1000)
+                self.assertEqual(self.bot.tunable(key), lo, "%s: підлога не тримає" % key)
+
+    def test_garbage_falls_back_to_env(self):
+        for key, (env_default, _c, _lo, _hi) in self.bot.TUNABLES.items():
+            with self.subTest(key=key):
+                self.live(key, "не число")
+                self.assertEqual(self.bot.tunable(key), env_default())
+
+    def test_flags_toggle(self):
+        for key in self.bot.FLAGS:
+            with self.subTest(key=key):
+                self.live(key, "1")
+                self.assertTrue(self.bot.flag(key))
+                self.live(key, "0")
+                self.assertFalse(self.bot.flag(key))
+
+    def test_clean_db_uses_env_defaults(self):
+        bot = load_bot(MAX_HEIGHT=1080, MAX_CONCURRENT_DOWNLOADS=4, VERIFY_MEDIA=0)
+        bot.db_init()
+        bot.settings_load_sync()
+        self.assertEqual(bot.tunable("max_height"), 1080)
+        self.assertEqual(bot.tunable("max_concurrent"), 4)
+        self.assertFalse(bot.flag("verify_media"))
+
+
+class TestLadders(unittest.TestCase):
+    """Сходинки рахуються на кожне завдання — стеля міняється без перезапуску."""
+
+    def setUp(self):
+        self.bot = load_bot(MAX_HEIGHT=720, LONG_MAX_HEIGHT=2160, LONG_MIN_HEIGHT=720)
+        self.bot.db_init()
+        self.bot.settings_load_sync()
+
+    def live(self, key, value):
+        self.bot.set_setting_sync(key, value)
+        self.bot.settings_load_sync()
+
+    def test_default_from_env(self):
+        self.assertEqual(self.bot.quality_ladder(), [720, 480, 360])
+        self.assertEqual(self.bot.long_ladder(), [2160, 1440, 1080, 720])
+
+    def test_changes_take_effect(self):
+        self.live("max_height", 1080)
+        self.assertEqual(self.bot.quality_ladder()[0], 1080)
+        self.live("long_max_height", 4320)
+        self.assertEqual(self.bot.long_ladder()[0], 4320)
+
+    def test_never_empty(self):
+        for hi in (240, 720, 1080, 4320):
+            for lo in (144, 720, 1080, 4320):
+                with self.subTest(hi=hi, lo=lo):
+                    self.live("max_height", hi)
+                    self.live("long_max_height", hi)
+                    self.live("long_min_height", lo)
+                    self.assertTrue(self.bot.quality_ladder())
+                    self.assertTrue(self.bot.long_ladder(), "min>max не має давати порожню драбину")
+
+    def test_ladder_descends(self):
+        self.assertEqual(self.bot.long_ladder(), sorted(self.bot.long_ladder(), reverse=True))
+
+
+class TestYtdlpArgs(unittest.TestCase):
+    def setUp(self):
+        self.bot = load_bot(CONCURRENT_FRAGMENTS=5, YTDLP_SLEEP=0)
+        self.bot.db_init()
+        self.bot.settings_load_sync()
+
+    def test_fragments_and_sleep_are_live(self):
+        args = " ".join(self.bot.common_ytdlp())
+        self.assertIn("--concurrent-fragments", args)
+        self.assertNotIn("--sleep-requests", args)
+
+        self.bot.set_setting_sync("frag_concurrency", 1)
+        self.bot.set_setting_sync("ytdlp_sleep", "1")
+        self.bot.settings_load_sync()
+        args = self.bot.common_ytdlp()
+        self.assertNotIn("--concurrent-fragments", args)
+        self.assertIn("--sleep-requests", args)
+
+
+class TestAccess(unittest.TestCase):
+    def setUp(self):
+        self.bot = load_bot()
+        self.bot.db_init()
+        self.bot.settings_load_sync()
+
+    def test_whitelist_off_means_open(self):
+        self.assertEqual(self.bot.resolve_access(5, "u", 5, False), "extended")
+        self.assertEqual(self.bot.resolve_access(5, "u", -100, True), "extended")
+
+    def test_whitelist_on_limits_to_listed_chats(self):
+        self.bot.access_add_sync("chat", "-100123", "full", "Свій чат")
+        self.bot.set_setting_sync("whitelist", "1")
+        self.bot.settings_load_sync()
+        self.assertEqual(self.bot.resolve_access(5, "u", -100123, True), "extended")
+        self.assertEqual(self.bot.resolve_access(5, "u", -100999, True), "none")
+        self.assertEqual(self.bot.resolve_access(5, "u", 5, False), "none",
+                         "приват при увімкненому списку — тільки адміну")
+        self.assertEqual(self.bot.resolve_access(777, "u", 777, False), "admin")
+
+    def test_migration_from_old_model(self):
+        """Стара база: режим 'лише зі списку', користувачі й рівні."""
+        import sqlite3
+        bot = load_bot()
+        con = sqlite3.connect(bot.STATS_DB)
+        con.execute("CREATE TABLE settings(key TEXT PRIMARY KEY, value TEXT)")
+        con.execute("CREATE TABLE access(kind TEXT, ident TEXT, level TEXT, label TEXT,"
+                    " PRIMARY KEY(kind, ident))")
+        con.execute("INSERT INTO settings VALUES('access_mode','restricted')")
+        con.executemany("INSERT INTO access VALUES(?,?,?,?)", [
+            ("user", "@vasya", "basic", "Вася"),
+            ("chat", "-100123", "basic", "Чат")])
+        con.commit()
+        con.close()
+
+        bot.db_init()
+        bot.settings_load_sync()
+        self.assertEqual(bot.setting("whitelist"), "1", "режим мав перетворитись на тумблер")
+        self.assertEqual([r["ident"] for r in bot.access_list_sync()], ["-100123"])
+        self.assertNotIn(("user", "@vasya"), bot._access, "записи користувачів мали зникнути")
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)
