@@ -18,14 +18,20 @@ set -e
 # оновлення тихо падало з 404.
 if [ "$AUTO_UPGRADE_YTDLP" = "1" ]; then
     CHAN="${YTDLP_CHANNEL:-stable}"
+    # Every channel keeps the "curl-cffi" extra: it is what lets yt-dlp
+    # impersonate a browser's TLS fingerprint. Drop it and TikTok starts
+    # answering 403 Forbidden to everything, cookies or no cookies.
+    # Кожен канал тягне екстру "curl-cffi": саме вона дає yt-dlp вдавати
+    # TLS-відбиток браузера. Без неї TikTok починає віддавати 403 Forbidden
+    # на будь-який запит — хоч із cookies, хоч без них.
     case "$CHAN" in
         # nightly builds are published to PyPI as pre-releases
         # nightly-збірки публікуються на PyPI як pre-release
-        nightly) set -- --pre "yt-dlp[default]" ;;
+        nightly) set -- --pre "yt-dlp[default,curl-cffi]" ;;
         # master: source tarball, no git needed in the image
         # master: тарбол з вихідним кодом, git в образі не потрібен
-        master)  set -- "yt-dlp[default] @ https://github.com/yt-dlp/yt-dlp/archive/refs/heads/master.tar.gz" ;;
-        *)       set -- "yt-dlp[default]" ;;
+        master)  set -- "yt-dlp[default,curl-cffi] @ https://github.com/yt-dlp/yt-dlp/archive/refs/heads/master.tar.gz" ;;
+        *)       set -- "yt-dlp[default,curl-cffi]" ;;
     esac
 
     echo "[entrypoint] Upgrading yt-dlp (channel: $CHAN) / Оновлюю yt-dlp (канал: $CHAN)…"

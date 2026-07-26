@@ -93,6 +93,11 @@ jobs:
             ffprobe -version > /dev/null
             deno --version   > /dev/null
             yt-dlp --version
+            # Без curl_cffi список цілей імперсонації порожній, і TikTok
+            # відповідає 403 Forbidden навіть на запит із дійсними cookies.
+            # Without curl_cffi the impersonate target list is empty and TikTok
+            # answers 403 Forbidden even to a request carrying valid cookies.
+            yt-dlp --list-impersonate-targets | grep -qi chrome
             python -c "import aiogram, aiohttp; print(\"aiogram\", aiogram.__version__)"
             BOT_TOKEN=1:test python -c "
           import importlib.util, os

@@ -20,6 +20,7 @@ CI runs exactly this on every push.
 | `test_lite.py` | LITE writes nothing to disk, works in groups only, `ALLOWED_CHATS`, and most importantly does not break the full mode |
 | `test_i18n.py` | same keys in `uk`/`en`, no Ukrainian strings bypassing the dictionary, every `data-i18n` translated |
 | `test_sending.py` | external post titles never break a message: markdown parsing is off, no stray markers left in any string |
+| `test_cookies.py` | short-lived TikTok cookies are stripped on upload (a stale one turns every request into 403), login keys and other sites survive, the file stays parseable |
 | `test_entrypoint.py` | the yt-dlp self-upgrade actually works: documented install method per channel, no dead placeholder wheel links, failures are loud |
 | `test_release.py` | the publish workflow builds for amd64+arm64, smoke-tests the image before releasing, needs no manual secrets; both stacks pull the published image |
 | `test_deploy.py` | compose parses without duplicate keys, every variable is read by the code, `.dockerignore` keeps the needed files, no secrets in the repository |

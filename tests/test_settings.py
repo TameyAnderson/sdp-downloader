@@ -2,7 +2,7 @@
 """Живі параметри: значення з панелі мають діяти одразу і не вилітати за межі."""
 import unittest
 
-from helper import load_bot
+from helper import load_bot, read
 
 
 class TestTunables(unittest.TestCase):
@@ -99,6 +99,49 @@ class TestYtdlpArgs(unittest.TestCase):
         args = self.bot.common_ytdlp()
         self.assertNotIn("--concurrent-fragments", args)
         self.assertIn("--sleep-requests", args)
+
+
+class TestTikTokGoesThroughTheApi(unittest.TestCase):
+    """Для залогіненої сесії TikTok віддає іншу верстку, ніж очікує парсер
+    yt-dlp, і видобування падає з «Unable to extract universal data for
+    rehydration». Похід у мобільний API обходить сторінку взагалі.
+    """
+
+    TIKTOK = "https://www.tiktok.com/@someone/video/7665817957959896340"
+
+    def setUp(self):
+        self.bot = load_bot()
+
+    def args_for(self, url):
+        return " ".join(self.bot._with_auth([], url))
+
+    def test_tiktok_links_get_the_api_host(self):
+        args = self.args_for(self.TIKTOK)
+        self.assertIn("--extractor-args", args)
+        self.assertIn("tiktok:api_hostname=", args)
+
+    def test_short_links_count_too(self):
+        for short in ("https://vm.tiktok.com/ZMabc/", "https://vt.tiktok.com/ZSxyz/"):
+            with self.subTest(url=short):
+                self.assertIn("tiktok:api_hostname=", self.args_for(short))
+
+    def test_other_platforms_are_untouched(self):
+        for url in ("https://www.instagram.com/reel/Abc123/",
+                    "https://www.youtube.com/watch?v=dQw4w9WgXcQ"):
+            with self.subTest(url=url):
+                self.assertNotIn("--extractor-args", self.args_for(url))
+
+    def test_it_can_be_turned_off(self):
+        """Якщо TikTok зламає цей хост — має бути ручка, а не правка коду."""
+        off = load_bot(TIKTOK_API_HOSTNAME="")
+        self.assertNotIn("--extractor-args", " ".join(off._with_auth([], self.TIKTOK)))
+
+    def test_every_call_site_passes_the_url(self):
+        """Забутий url = мовчазне повернення до зламаного розбору сторінки."""
+        src = read("bot.py")
+        self.assertNotIn("_with_auth(args)", src,
+                         "десь викликано без посилання — TikTok знову піде в HTML")
+        self.assertEqual(src.count("_with_auth(args, url)"), 5)
 
 
 class TestAccess(unittest.TestCase):

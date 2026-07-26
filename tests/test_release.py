@@ -56,7 +56,8 @@ class TestReleaseWorkflow(unittest.TestCase):
         self.assertLess(smoke, release, "реліз не має виходити раніше за перевірку образу")
 
         script = self.job["steps"][smoke]["run"]
-        for tool in ("ffmpeg", "ffprobe", "deno", "yt-dlp", "aiogram"):
+        for tool in ("ffmpeg", "ffprobe", "deno", "yt-dlp", "aiogram",
+                     "--list-impersonate-targets"):
             self.assertIn(tool, script, "smoke-тест не перевіряє %s" % tool)
 
     def test_release_only_on_tags(self):

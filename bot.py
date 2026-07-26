@@ -121,6 +121,12 @@ COOKIES_MAX_BYTES = int(os.getenv("COOKIES_MAX_BYTES", "262144"))
 # Remind the admin this many days before the cookies session expires. 0 = off.
 COOKIES_WARN_DAYS = int(os.getenv("COOKIES_WARN_DAYS", "3"))
 PROXY = os.getenv("PROXY", "").strip()
+# TikTok: go through the mobile API instead of parsing the web page — see
+# _with_auth(). Empty value = off, back to the HTML parser.
+# TikTok: ходити в мобільний API замість парсингу сторінки — див. _with_auth().
+# Порожнє значення = вимкнено, повертаємось до розбору HTML.
+TIKTOK_API_HOSTNAME = os.getenv(
+    "TIKTOK_API_HOSTNAME", "api22-normal-c-useast2a.tiktokv.com").strip()
 
 # Health endpoint + persistent file cache.
 HEALTH_PORT = int(os.getenv("HEALTH_PORT", "8080"))
@@ -1187,7 +1193,7 @@ def _is_playlist(url):
 async def ytdlp_playlist_entries(url):
     args = ["yt-dlp", "--flat-playlist", "--no-warnings",
             "--playlist-end", str(tunable("playlist_max")), "--print", "%(url)s"]
-    _with_auth(args)
+    _with_auth(args, url)
     args.append(url)
     try:
         proc = await asyncio.create_subprocess_exec(
@@ -1283,11 +1289,21 @@ def _combined_fmt(height):
     return "b[height<={h}]/b".format(h=height)
 
 
-def _with_auth(args):
+def _with_auth(args, url=None):
     if COOKIES_FILE and Path(COOKIES_FILE).exists():
         args += ["--cookies", COOKIES_FILE]
     if PROXY:
         args += ["--proxy", PROXY]
+    # TikTok serves a logged-in visitor a different page layout than yt-dlp's
+    # HTML parser expects, and the extraction dies on "Unable to extract
+    # universal data for rehydration". Pointing it at the mobile API skips the
+    # page entirely. Set TIKTOK_API_HOSTNAME to an empty value to turn this off.
+    # Залогіненому відвідувачу TikTok віддає іншу верстку, ніж очікує HTML-парсер
+    # yt-dlp, і видобування падає з "Unable to extract universal data for
+    # rehydration". Похід у мобільний API обходить сторінку взагалі. Щоб
+    # вимкнути — лиши TIKTOK_API_HOSTNAME порожнім.
+    if url and TIKTOK_API_HOSTNAME and "tiktok" in url.lower():
+        args += ["--extractor-args", "tiktok:api_hostname=" + TIKTOK_API_HOSTNAME]
     return args
 
 
@@ -1301,7 +1317,7 @@ def _build_ytdlp_args(url, out_template, fmt):
         "-o",
         out_template,
     ] + common_ytdlp()
-    _with_auth(args)
+    _with_auth(args, url)
     trim = _TRIM.get()
     if trim:
         # Trim to [start-end]; native downloader only (aria2 has no sections).
@@ -1325,7 +1341,7 @@ def _build_ytdlp_audio_args(url, out_template):
         "-o",
         out_template,
     ] + common_ytdlp()
-    _with_auth(args)
+    _with_auth(args, url)
     trim = _TRIM.get()
     if trim:
         args += ["--download-sections", "*%d-%d" % (trim[0], trim[1]),
@@ -1755,7 +1771,7 @@ async def fetch_title(url):
     """Ask yt-dlp for the title only (no download). Returns None on failure."""
     args = ["yt-dlp", "--no-playlist", "--skip-download", "--no-warnings",
             "--print", "%(title)s"] + common_ytdlp()
-    _with_auth(args)
+    _with_auth(args, url)
     args.append(url)
     try:
         proc = await asyncio.create_subprocess_exec(
@@ -2719,7 +2735,7 @@ async def start_web_server(bot):
                 "source": _source_label(url, plat, True)}})
         args = ["yt-dlp", "--dump-single-json", "--no-playlist", "--skip-download",
                 "--no-warnings"] + common_ytdlp()
-        _with_auth(args)
+        _with_auth(args, url)
         args.append(url)
         try:
             proc = await asyncio.create_subprocess_exec(
@@ -2865,6 +2881,41 @@ async def cmd_version(message, bot):
 
 
 _COOKIE_KEYS = ("sessionid", "ds_user_id", "csrftoken", "c_user", "xs")
+
+# TikTok hands out short-lived technical cookies next to the login ones. They
+# are bound to the browser and the IP that created them and die within minutes,
+# so by the time a file reaches the server they are already stale — and a stale
+# one makes TikTok answer 403 Forbidden to everything, no matter how valid the
+# sessionid sitting next to it is. Worse, they stop yt-dlp from solving the JS
+# challenge on its own, which is what makes TikTok work without cookies at all.
+# TikTok видає короткоживучі технічні cookies поряд із логін-ключами. Вони
+# прив'язані до браузера та IP, де створені, і живуть хвилини — тож на сервер
+# приїжджають уже протухлими, а протухлий такий ключ змушує TikTok відповідати
+# 403 Forbidden на будь-який запит, хоч би який валідний sessionid лежав поруч.
+# Гірше: вони не дають yt-dlp самому розв'язати JS-виклик, а саме на цьому
+# тримається завантаження з TikTok узагалі без cookies.
+_VOLATILE_COOKIES = frozenset((
+    "msToken", "ttwid", "tt_chain_token",
+    "odin_tt", "s_v_web_id", "tt_csrf_token",
+))
+_VOLATILE_DOMAINS = ("tiktok", "douyin")
+
+
+def strip_volatile_cookies(text):
+    """Drop the short-lived TikTok cookies. Returns (clean text, dropped count).
+
+    Only TikTok domains are touched: the same names must never be stripped
+    from another site's session by accident.
+    """
+    kept, dropped = [], 0
+    for line in text.splitlines():
+        parts = line.split("\t")
+        if len(parts) >= 7 and parts[5] in _VOLATILE_COOKIES \
+                and any(d in parts[0].lower() for d in _VOLATILE_DOMAINS):
+            dropped += 1
+            continue
+        kept.append(line)
+    return "\n".join(kept).rstrip("\n") + "\n", dropped
 
 
 def parse_cookies_txt(text):
@@ -3087,7 +3138,7 @@ async def on_cookies_text(message):
         return
     if not _is_admin(message) or message.chat.type != ChatType.PRIVATE:
         return
-    text = message.text or ""
+    text, dropped = strip_volatile_cookies(message.text or "")
     ok, info = parse_cookies_txt(text)
     if not ok:
         await message.reply(
@@ -3100,7 +3151,8 @@ async def on_cookies_text(message):
         logger.exception("cookies store failed")
         await message.reply(t("ck_bad"), disable_notification=True)
         return
-    logger.info("Cookies updated by admin (pasted): %d entries", info["count"])
+    logger.info("Cookies updated by admin (pasted): %d entries, %d volatile dropped",
+                info["count"], dropped)
     await asyncio.to_thread(set_setting_sync, "ck_state", "ok")
     await asyncio.to_thread(settings_load_sync)
     await message.reply(
@@ -3134,7 +3186,7 @@ async def on_cookies_document(message, bot):
         return
     try:
         raw = await fetch_telegram_file(bot, doc)
-        text = raw.decode("utf-8", "ignore")
+        text, dropped = strip_volatile_cookies(raw.decode("utf-8", "ignore"))
     except Exception as exc:  # noqa: BLE001
         logger.exception("cookies download failed")
         await message.reply(t("ck_fetch_fail", err=str(exc)[:120]),
@@ -3158,8 +3210,8 @@ async def on_cookies_document(message, bot):
         await message.reply(t("ck_bad"), disable_notification=True)
         return
 
-    logger.info("Cookies updated by admin: %d entries, auth=%s",
-                info["count"], ",".join(info["auth"]))
+    logger.info("Cookies updated by admin: %d entries, auth=%s, %d volatile dropped",
+                info["count"], ",".join(info["auth"]), dropped)
     await asyncio.to_thread(set_setting_sync, "ck_state", "ok")
     await asyncio.to_thread(settings_load_sync)
     await message.reply(

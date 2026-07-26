@@ -15,18 +15,25 @@ from helper import ROOT, read
 
 SCRIPT = ROOT / "entrypoint.sh"
 
+# Без цієї екстри yt-dlp не вміє вдавати TLS-відбиток браузера,
+# і TikTok відповідає 403 Forbidden навіть на запит із дійсними cookies.
+SPEC = "yt-dlp[default,curl-cffi]"
+
+
+def case_block():
+    """Справжній case з entrypoint.sh — не копія в тесті.
+
+    Копія жила б власним життям: скрипт міняють, тест і далі перевіряє
+    те, чого в ньому вже немає.
+    """
+    script = read("entrypoint.sh")
+    start = script.index('case "$CHAN" in')
+    return script[start:script.index("esac", start) + 4]
+
 
 def pip_args(channel):
     """Що саме entrypoint передасть у pip для заданого каналу."""
-    probe = r'''
-    CHAN="${YTDLP_CHANNEL:-stable}"
-    case "$CHAN" in
-        nightly) set -- --pre "yt-dlp[default]" ;;
-        master)  set -- "yt-dlp[default] @ https://github.com/yt-dlp/yt-dlp/archive/refs/heads/master.tar.gz" ;;
-        *)       set -- "yt-dlp[default]" ;;
-    esac
-    for a in "$@"; do echo "$a"; done
-    '''
+    probe = 'CHAN="${YTDLP_CHANNEL:-stable}"\n%s\nfor a in "$@"; do echo "$a"; done\n' % case_block()
     env = {"YTDLP_CHANNEL": channel} if channel else {}
     out = subprocess.run(["sh", "-c", probe], capture_output=True, text=True, env=env)
     return [l for l in out.stdout.splitlines() if l]
@@ -45,15 +52,15 @@ class TestChannels(unittest.TestCase):
     """Кожен канал має ставитись задокументованим способом."""
 
     def test_stable_is_plain_pypi(self):
-        self.assertEqual(pip_args("stable"), ["yt-dlp[default]"])
+        self.assertEqual(pip_args("stable"), [SPEC])
 
     def test_unset_falls_back_to_stable(self):
-        self.assertEqual(pip_args(None), ["yt-dlp[default]"])
+        self.assertEqual(pip_args(None), [SPEC])
 
     def test_nightly_uses_prereleases(self):
         args = pip_args("nightly")
         self.assertIn("--pre", args, "nightly живе на PyPI як pre-release")
-        self.assertIn("yt-dlp[default]", args)
+        self.assertIn(SPEC, args)
 
     def test_master_uses_a_source_tarball(self):
         args = pip_args("master")
@@ -62,6 +69,35 @@ class TestChannels(unittest.TestCase):
         self.assertIn("github.com/yt-dlp/yt-dlp/", spec)
         # git у образі немає — специфікація git+ тут не спрацює
         self.assertNotIn("git+", spec)
+
+
+class TestImpersonation(unittest.TestCase):
+    """TLS-відбиток браузера.
+
+    TikTok відсіює клієнтів, чиє TLS-рукостискання не схоже на браузерне.
+    yt-dlp це вміє, але тільки коли поруч стоїть curl_cffi — інакше в лог
+    падає «attempting impersonation, but no impersonate target is available»,
+    а сам запит завершується 403 Forbidden. Cookies на це не впливають:
+    з ними помилка та сама.
+    """
+
+    def test_every_channel_keeps_the_extra(self):
+        for channel in ("stable", "nightly", "master", None):
+            with self.subTest(channel=channel or "unset"):
+                joined = " ".join(pip_args(channel))
+                self.assertIn("curl-cffi", joined,
+                              "оновлення викине імперсонацію — TikTok почне бити 403")
+
+    def test_image_ships_it_too(self):
+        """Апгрейд при старті вимикається — тоді все тримається на образі."""
+        self.assertIn("curl-cffi", read("requirements.txt"),
+                      "з AUTO_UPGRADE_YTDLP=0 в образі не буде імперсонації")
+
+    def test_reason_is_written_down(self):
+        """Екстра виглядає необов'язковою — без пояснення її колись приберуть."""
+        for f in ("entrypoint.sh", "requirements.txt"):
+            with self.subTest(file=f):
+                self.assertIn("403", read(f), "%s: не пояснено, навіщо curl-cffi" % f)
 
 
 class TestNoDeadLinks(unittest.TestCase):
