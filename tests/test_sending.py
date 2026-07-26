@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
-"""Відправка: назва поста ззовні не має ламати повідомлення.
+"""Sending: a post title from outside must not break the message.
 
-Назви приходять із чужих сайтів і можуть містити «_», «*», «[», «`».
-З увімкненою markdown-розміткою Telegram намагається розібрати такий підпис,
-не знаходить закриття і відхиляє весь запит:
+Titles come from other people's sites and may contain "_", "*", "[", "`".
+With markdown parsing on, Telegram tries to parse such a caption, finds no
+closing marker and rejects the whole request:
 
     Bad Request: can't parse entities: Can't find end of the entity
 
-Файл при цьому завантажується нормально — падає саме відправка, тому збій
-виглядає як «щось пішло не так» без видимої причини.
+The file downloads just fine — it is the sending that fails, so the failure
+looks like "something went wrong" with no visible cause.
 """
 import re
 import unittest
@@ -17,7 +17,7 @@ from helper import load_bot, read
 
 BOT = load_bot()
 
-# Назви, які реально трапляються і ламали б розмітку
+# Titles that really occur and would have broken the markup
 NASTY_TITLES = [
     "reel by @user_name",
     "*акція* тільки сьогодні",
@@ -32,24 +32,24 @@ NASTY_TITLES = [
 
 class TestNoMarkdownParsing(unittest.TestCase):
     def test_bot_sends_without_parse_mode(self):
-        """Глобальна розмітка вимкнена — інакше будь-який _ у назві = падіння."""
+        """Global markup is off — otherwise any _ in a title means a crash."""
         src = read("bot.py")
         self.assertNotIn('parse_mode="Markdown"', src,
-                         "розмітка увімкнена: зовнішні назви знову ламатимуть відправку")
+                         "markup is on: external titles will break sending again")
         self.assertNotIn("parse_mode='Markdown'", src)
         self.assertIn("parse_mode=None", src)
 
     def test_no_markdown_markers_left_in_strings(self):
-        """Якщо розмітки немає, зірочки в текстах були б видні користувачу."""
+        """With no markup, stray asterisks would be visible to the user."""
         for lang, table in BOT.T.items():
             for key, value in table.items():
                 if not isinstance(value, str):
                     continue
                 with self.subTest(lang=lang, key=key):
-                    self.assertNotRegex(value, r"\*\S", "%s: лишилась markdown-зірочка" % key)
+                    self.assertNotRegex(value, r"\*\S", "%s: a markdown asterisk left" % key)
 
     def test_caption_is_passed_through_untouched(self):
-        """Підпис не екранується й не ріжеться — його просто передають як є."""
+        """The caption is not escaped or trimmed — it is passed through as is."""
         src = read("bot.py")
         block = src[src.index("async def send_video_with_meta"):]
         block = block[:block.index("sent = await message.reply_video")]
@@ -57,9 +57,9 @@ class TestNoMarkdownParsing(unittest.TestCase):
 
 
 class TestTitleSafety(unittest.TestCase):
-    """Назва проходить обрізання до ліміту Telegram і не змінюється інакше."""
+    """A title is cut to Telegram's limit and is not changed in any other way."""
 
-    LIMIT = 1024        # ліміт підпису в Telegram
+    LIMIT = 1024        # Telegram's caption limit
 
     def test_titles_survive_unchanged(self):
         for title in NASTY_TITLES:
@@ -69,7 +69,7 @@ class TestTitleSafety(unittest.TestCase):
                 self.assertLessEqual(len(caption), self.LIMIT)
 
     def test_long_title_is_cut_below_the_limit(self):
-        caption = ("дуже довга назва " * 200)[:1000]
+        caption = ("a very long title " * 200)[:1000]
         self.assertLessEqual(len(caption), self.LIMIT)
 
     def test_titles_mode_still_controls_captions(self):
@@ -79,7 +79,7 @@ class TestTitleSafety(unittest.TestCase):
 
 
 class TestExternalTextInAdminMessages(unittest.TestCase):
-    """Тексти комітів і помилок теж підставляються в повідомлення адміну."""
+    """Commit messages and error texts get interpolated into admin messages too."""
 
     def test_commit_message_with_special_chars(self):
         note = BOT.github_change_note("aaa1111", "bbb2222", "fix: _underscore_ *star*")

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Спільне для тестів: імпорт bot.py у пісочниці, без запису на диск проєкту."""
+"""Shared bits: import bot.py in a sandbox, writing nothing into the project."""
 import importlib.util
 import os
 import sys
@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 def load_bot(**env):
-    """Імпортує bot.py з чистими змінними оточення. Кожен виклик — новий модуль."""
+    """Import bot.py with a clean environment. Every call is a fresh module."""
     tmp = tempfile.mkdtemp(prefix="sdp-test-")
     base = {
         "BOT_TOKEN": "1:test",
@@ -24,7 +24,7 @@ def load_bot(**env):
     base.update({k: str(v) for k, v in env.items()})
 
     saved = dict(os.environ)
-    # Прибираємо все, що могло протекти з оточення CI або хоста.
+    # Clear anything that could have leaked in from the CI or host environment.
     for k in list(os.environ):
         if k.startswith(("ENABLE_", "MAX_", "LONG_", "COBALT_", "VERIFY_", "CACHE_",
                          "WEBAPP_", "TELEGRAM_", "COOKIES_", "GITHUB_", "YTDLP_",
@@ -48,6 +48,6 @@ def read(name):
     return (ROOT / name).read_text(encoding="utf-8")
 
 
-if __name__ == "__main__":  # швидка перевірка самого хелпера
+if __name__ == "__main__":  # quick check of the helper itself
     b = load_bot()
-    print("bot.py імпортується, сервісів:", len(b.SERVICES))
+    print("bot.py imports fine, services:", len(b.SERVICES))

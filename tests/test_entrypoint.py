@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
-"""Оновлення yt-dlp при старті контейнера.
+"""Upgrading yt-dlp when the container starts.
 
-Канали (stable / nightly / master) мають ставитись задокументованими
-способами. Посилання на wheel-заглушку «yt_dlp-0.0.0-py3-none-any.whl»
-у збіркових репозиторіях більше не існує й повертає 404 — а помилка
-оновлення тиха за своєю природою: бот просто працює зі старою версією,
-і зламані екстрактори лишаються зламаними, поки хтось не загляне в лог.
+Channels (stable / nightly / master) must install through the documented
+methods. The "yt_dlp-0.0.0-py3-none-any.whl" placeholder wheel no longer
+exists in the build repos and returns 404 — and a failed upgrade is silent
+by nature: the bot simply runs an old version, and broken extractors stay
+broken until somebody reads the log.
 """
 import re
 import subprocess
@@ -15,16 +15,16 @@ from helper import ROOT, read
 
 SCRIPT = ROOT / "entrypoint.sh"
 
-# Без цієї екстри yt-dlp не вміє вдавати TLS-відбиток браузера,
-# і TikTok відповідає 403 Forbidden навіть на запит із дійсними cookies.
+# Without this extra yt-dlp cannot mimic a browser's TLS fingerprint,
+# and TikTok answers 403 Forbidden even to a request carrying valid cookies.
 SPEC = "yt-dlp[default,curl-cffi]"
 
 
 def case_block():
-    """Справжній case з entrypoint.sh — не копія в тесті.
+    """The real case from entrypoint.sh — not a copy kept in the test.
 
-    Копія жила б власним життям: скрипт міняють, тест і далі перевіряє
-    те, чого в ньому вже немає.
+    A copy would drift: the script gets changed and the test keeps checking
+    something that is no longer in it.
     """
     script = read("entrypoint.sh")
     start = script.index('case "$CHAN" in')
@@ -32,7 +32,7 @@ def case_block():
 
 
 def pip_args(channel):
-    """Що саме entrypoint передасть у pip для заданого каналу."""
+    """What exactly entrypoint hands to pip for a given channel."""
     probe = 'CHAN="${YTDLP_CHANNEL:-stable}"\n%s\nfor a in "$@"; do echo "$a"; done\n' % case_block()
     env = {"YTDLP_CHANNEL": channel} if channel else {}
     out = subprocess.run(["sh", "-c", probe], capture_output=True, text=True, env=env)
@@ -49,7 +49,7 @@ class TestScriptIsValid(unittest.TestCase):
 
 
 class TestChannels(unittest.TestCase):
-    """Кожен канал має ставитись задокументованим способом."""
+    """Every channel must install through its documented method."""
 
     def test_stable_is_plain_pypi(self):
         self.assertEqual(pip_args("stable"), [SPEC])
@@ -59,7 +59,7 @@ class TestChannels(unittest.TestCase):
 
     def test_nightly_uses_prereleases(self):
         args = pip_args("nightly")
-        self.assertIn("--pre", args, "nightly живе на PyPI як pre-release")
+        self.assertIn("--pre", args, "nightly lives on PyPI as a pre-release")
         self.assertIn(SPEC, args)
 
     def test_master_uses_a_source_tarball(self):
@@ -67,18 +67,18 @@ class TestChannels(unittest.TestCase):
         spec = args[0]
         self.assertIn("archive/refs/heads/master.tar.gz", spec)
         self.assertIn("github.com/yt-dlp/yt-dlp/", spec)
-        # git у образі немає — специфікація git+ тут не спрацює
+        # there is no git in the image — a git+ spec would not work here
         self.assertNotIn("git+", spec)
 
 
 class TestImpersonation(unittest.TestCase):
-    """TLS-відбиток браузера.
+    """The browser TLS fingerprint.
 
-    TikTok відсіює клієнтів, чиє TLS-рукостискання не схоже на браузерне.
-    yt-dlp це вміє, але тільки коли поруч стоїть curl_cffi — інакше в лог
-    падає «attempting impersonation, but no impersonate target is available»,
-    а сам запит завершується 403 Forbidden. Cookies на це не впливають:
-    з ними помилка та сама.
+    TikTok filters out clients whose TLS handshake does not look like a
+    browser's. yt-dlp can do this, but only with curl_cffi alongside it —
+    otherwise the log fills with "attempting impersonation, but no
+    impersonate target is available" and the request ends in 403 Forbidden.
+    Cookies make no difference: the error is exactly the same with them.
     """
 
     def test_every_channel_keeps_the_extra(self):
@@ -86,32 +86,32 @@ class TestImpersonation(unittest.TestCase):
             with self.subTest(channel=channel or "unset"):
                 joined = " ".join(pip_args(channel))
                 self.assertIn("curl-cffi", joined,
-                              "оновлення викине імперсонацію — TikTok почне бити 403")
+                              "an upgrade would drop impersonation — TikTok starts 403ing")
 
     def test_image_ships_it_too(self):
-        """Апгрейд при старті вимикається — тоді все тримається на образі."""
+        """The startup upgrade can be off — then everything rests on the image."""
         self.assertIn("curl-cffi", read("requirements.txt"),
-                      "з AUTO_UPGRADE_YTDLP=0 в образі не буде імперсонації")
+                      "with AUTO_UPGRADE_YTDLP=0 the image would have no impersonation")
 
     def test_reason_is_written_down(self):
-        """Екстра виглядає необов'язковою — без пояснення її колись приберуть."""
+        """The extra looks optional — without a reason someone will remove it."""
         for f in ("entrypoint.sh", "requirements.txt"):
             with self.subTest(file=f):
-                self.assertIn("403", read(f), "%s: не пояснено, навіщо curl-cffi" % f)
+                self.assertIn("403", read(f), "%s: does not say why curl-cffi is there" % f)
 
 
 class TestNoDeadLinks(unittest.TestCase):
     def test_placeholder_wheel_is_not_used_anymore(self):
-        """Саме це посилання й повертало 404."""
+        """This is the very link that used to return 404."""
         script = read("entrypoint.sh")
         code = "\n".join(l for l in script.splitlines() if not l.strip().startswith("#"))
         self.assertNotIn("yt_dlp-0.0.0", code,
-                         "повернулось мертве посилання на wheel-заглушку")
+                         "the dead placeholder wheel link is back")
         self.assertNotIn("nightly-builds", code)
         self.assertNotIn("master-builds", code)
 
     def test_failure_is_loud(self):
-        """Тиха помилка = бот роками сидить на старій версії й ніхто не знає."""
+        """A silent failure = the bot sits on an old version for years unnoticed."""
         script = read("entrypoint.sh")
         self.assertIn("FAILED", script)
         self.assertIn("НЕ ВДАЛОСЬ", script)
@@ -119,7 +119,7 @@ class TestNoDeadLinks(unittest.TestCase):
     def test_version_is_logged_either_way(self):
         script = read("entrypoint.sh")
         self.assertGreaterEqual(script.count("yt-dlp --version"), 2,
-                                "версію треба показувати і при успіху, і при збої")
+                                "the version must be shown on success and on failure")
 
 
 class TestDockerfileMatches(unittest.TestCase):
@@ -129,7 +129,7 @@ class TestDockerfileMatches(unittest.TestCase):
         self.assertIn("chmod +x entrypoint.sh", dockerfile)
 
     def test_local_bin_is_in_path(self):
-        """Оновлений yt-dlp лягає в ~/.local — без PATH його ніхто не побачить."""
+        """The upgraded yt-dlp lands in ~/.local — without PATH nobody sees it."""
         self.assertIn("/root/.local/bin", read("Dockerfile"))
 
 

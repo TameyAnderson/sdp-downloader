@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Живі параметри: значення з панелі мають діяти одразу і не вилітати за межі."""
+"""Live settings: a value from the panel must take effect at once and stay in range."""
 import unittest
 
 from helper import load_bot, read
@@ -19,14 +19,14 @@ class TestTunables(unittest.TestCase):
         for key, (env_default, _cast, lo, hi) in self.bot.TUNABLES.items():
             with self.subTest(key=key):
                 self.live(key, hi + 1000)
-                self.assertEqual(self.bot.tunable(key), hi, "%s: стеля не тримає" % key)
+                self.assertEqual(self.bot.tunable(key), hi, "%s: ceiling does not hold" % key)
                 self.live(key, lo - 1000)
-                self.assertEqual(self.bot.tunable(key), lo, "%s: підлога не тримає" % key)
+                self.assertEqual(self.bot.tunable(key), lo, "%s: floor does not hold" % key)
 
     def test_garbage_falls_back_to_env(self):
         for key, (env_default, _c, _lo, _hi) in self.bot.TUNABLES.items():
             with self.subTest(key=key):
-                self.live(key, "не число")
+                self.live(key, "not a number")
                 self.assertEqual(self.bot.tunable(key), env_default())
 
     def test_flags_toggle(self):
@@ -47,7 +47,7 @@ class TestTunables(unittest.TestCase):
 
 
 class TestLadders(unittest.TestCase):
-    """Сходинки рахуються на кожне завдання — стеля міняється без перезапуску."""
+    """Ladders are computed per job — the ceiling changes without a restart."""
 
     def setUp(self):
         self.bot = load_bot(MAX_HEIGHT=720, LONG_MAX_HEIGHT=2160, LONG_MIN_HEIGHT=720)
@@ -76,7 +76,8 @@ class TestLadders(unittest.TestCase):
                     self.live("long_max_height", hi)
                     self.live("long_min_height", lo)
                     self.assertTrue(self.bot.quality_ladder())
-                    self.assertTrue(self.bot.long_ladder(), "min>max не має давати порожню драбину")
+                    self.assertTrue(self.bot.long_ladder(),
+                                    "min>max must not produce an empty ladder")
 
     def test_ladder_descends(self):
         self.assertEqual(self.bot.long_ladder(), sorted(self.bot.long_ladder(), reverse=True))
@@ -102,9 +103,9 @@ class TestYtdlpArgs(unittest.TestCase):
 
 
 class TestTikTokGoesThroughTheApi(unittest.TestCase):
-    """Для залогіненої сесії TikTok віддає іншу верстку, ніж очікує парсер
-    yt-dlp, і видобування падає з «Unable to extract universal data for
-    rehydration». Похід у мобільний API обходить сторінку взагалі.
+    """TikTok serves a logged-in session a different page layout than yt-dlp's
+    parser expects, and extraction dies on "Unable to extract universal data
+    for rehydration". Going to the mobile API skips the page entirely.
     """
 
     TIKTOK = "https://www.tiktok.com/@someone/video/7665817957959896340"
@@ -132,15 +133,15 @@ class TestTikTokGoesThroughTheApi(unittest.TestCase):
                 self.assertNotIn("--extractor-args", self.args_for(url))
 
     def test_it_can_be_turned_off(self):
-        """Якщо TikTok зламає цей хост — має бути ручка, а не правка коду."""
+        """If TikTok ever kills this host, there must be a knob, not a code edit."""
         off = load_bot(TIKTOK_API_HOSTNAME="")
         self.assertNotIn("--extractor-args", " ".join(off._with_auth([], self.TIKTOK)))
 
     def test_every_call_site_passes_the_url(self):
-        """Забутий url = мовчазне повернення до зламаного розбору сторінки."""
+        """A forgotten url = a silent fall back to the broken page parsing."""
         src = read("bot.py")
         self.assertNotIn("_with_auth(args)", src,
-                         "десь викликано без посилання — TikTok знову піде в HTML")
+                         "called without the link somewhere — TikTok goes back to HTML")
         self.assertEqual(src.count("_with_auth(args, url)"), 5)
 
 
@@ -155,17 +156,17 @@ class TestAccess(unittest.TestCase):
         self.assertEqual(self.bot.resolve_access(5, "u", -100, True), "extended")
 
     def test_whitelist_on_limits_to_listed_chats(self):
-        self.bot.access_add_sync("chat", "-100123", "full", "Свій чат")
+        self.bot.access_add_sync("chat", "-100123", "full", "Own chat")
         self.bot.set_setting_sync("whitelist", "1")
         self.bot.settings_load_sync()
         self.assertEqual(self.bot.resolve_access(5, "u", -100123, True), "extended")
         self.assertEqual(self.bot.resolve_access(5, "u", -100999, True), "none")
         self.assertEqual(self.bot.resolve_access(5, "u", 5, False), "none",
-                         "приват при увімкненому списку — тільки адміну")
+                         "private chats with the whitelist on — admin only")
         self.assertEqual(self.bot.resolve_access(777, "u", 777, False), "admin")
 
     def test_migration_from_old_model(self):
-        """Стара база: режим 'лише зі списку', користувачі й рівні."""
+        """An old database: "listed only" mode, plus users and access levels."""
         import sqlite3
         bot = load_bot()
         con = sqlite3.connect(bot.STATS_DB)
@@ -174,16 +175,18 @@ class TestAccess(unittest.TestCase):
                     " PRIMARY KEY(kind, ident))")
         con.execute("INSERT INTO settings VALUES('access_mode','restricted')")
         con.executemany("INSERT INTO access VALUES(?,?,?,?)", [
-            ("user", "@vasya", "basic", "Вася"),
-            ("chat", "-100123", "basic", "Чат")])
+            ("user", "@someone", "basic", "Someone"),
+            ("chat", "-100123", "basic", "Chat")])
         con.commit()
         con.close()
 
         bot.db_init()
         bot.settings_load_sync()
-        self.assertEqual(bot.setting("whitelist"), "1", "режим мав перетворитись на тумблер")
+        self.assertEqual(bot.setting("whitelist"), "1",
+                         "the mode should have turned into a toggle")
         self.assertEqual([r["ident"] for r in bot.access_list_sync()], ["-100123"])
-        self.assertNotIn(("user", "@vasya"), bot._access, "записи користувачів мали зникнути")
+        self.assertNotIn(("user", "@someone"), bot._access,
+                         "user entries should be gone")
 
 
 if __name__ == "__main__":

@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
-"""Детекція силок: найчутливіше місце — саме тут ламалися TikTok та Instagram."""
+"""Link detection: the touchiest spot — TikTok and Instagram broke right here."""
 import unittest
 
 from helper import load_bot
 
 BOT = load_bot(ENABLE_TIKTOK=1, ENABLE_YOUTUBE=1, ENABLE_INSTAGRAM=1, ENABLE_FACEBOOK=1)
 
-# (посилання, очікувана платформа)
+# (link, expected platform)
 CASES = [
     ("https://www.tiktok.com/@user/video/7412345678901234567", "tiktok"),
     ("https://vm.tiktok.com/ZMabcdef/", "tiktok"),
@@ -28,7 +28,7 @@ class TestExtraction(unittest.TestCase):
         for url, _ in CASES:
             with self.subTest(url=url):
                 found = BOT.extract_urls("глянь оце %s топ" % url)
-                self.assertTrue(found, "силка не знайдена: %s" % url)
+                self.assertTrue(found, "link not found: %s" % url)
 
     def test_platform_detected(self):
         for url, plat in CASES:
@@ -51,17 +51,17 @@ class TestExtraction(unittest.TestCase):
 
 
 class TestInstagramTracking(unittest.TestCase):
-    """?igsh=… ламав Instagram: Cobalt повертав error.api.fetch.empty."""
+    """?igsh=… broke Instagram: Cobalt kept returning error.api.fetch.empty."""
 
     @staticmethod
     def _download_url(bot, url):
-        """Те, що реально піде в рушій (див. svc.get("strip") у _do_process)."""
+        """What actually reaches the engine (see svc.get("strip") in _do_process)."""
         svc = bot.SERVICES[bot._platform(url)]
         return url.split("?", 1)[0] if svc.get("strip") else url
 
     def test_instagram_marked_for_stripping(self):
         self.assertTrue(BOT.SERVICES["instagram"].get("strip"),
-                        "з Instagram треба зрізати параметри — інакше повертається igsh-баг")
+                        "Instagram needs its query stripped — otherwise the igsh bug is back")
 
     def test_tracking_params_stripped(self):
         dirty = "https://www.instagram.com/reel/Cabcdefghij/?igsh=MzRlODBiNWFlZA=="
@@ -70,7 +70,7 @@ class TestInstagramTracking(unittest.TestCase):
         self.assertEqual(clean, "https://www.instagram.com/reel/Cabcdefghij/")
 
     def test_youtube_keeps_its_query(self):
-        """У YouTube ідентифікатор живе саме в query — зрізати не можна."""
+        """On YouTube the id lives in the query itself — stripping kills the link."""
         url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
         self.assertFalse(BOT.SERVICES["youtube"].get("strip"))
         self.assertIn("v=dQw4w9WgXcQ", self._download_url(BOT, url))
@@ -93,7 +93,7 @@ class TestKind(unittest.TestCase):
         self.assertTrue(off.extract_urls("https://youtu.be/dQw4w9WgXcQ"))
 
     def test_allin_does_not_shadow_specific_services(self):
-        """All-in має бути ОСТАННІМ у реєстрі, інакше він перехопить усе."""
+        """All-in must come LAST in the registry, or it swallows everything."""
         self.assertEqual(list(BOT.SERVICES)[-1], "allin")
         allin = load_bot(ENABLE_ALLIN=1, ENABLE_TIKTOK=1)
         self.assertEqual(allin._platform("https://www.tiktok.com/@u/video/7412345678901234567"),

@@ -1,16 +1,17 @@
 # -*- coding: utf-8 -*-
-"""Чистка cookies перед збереженням.
+"""Sanitising cookies before they are stored.
 
-TikTok кладе поряд із логін-ключами короткоживучі технічні cookies
-(msToken, ttwid, s_v_web_id…). Вони прив'язані до браузера та IP, де
-створені, і живуть хвилини — на сервер приїжджають уже мертвими.
-Один такий ключ змушує TikTok відповідати 403 Forbidden на будь-який
-запит, хоч би який валідний sessionid лежав поруч, і додатково не дає
-yt-dlp самому розв'язати JS-виклик — а саме на цьому тримається
-завантаження з TikTok узагалі без cookies.
+TikTok puts short-lived technical cookies (msToken, ttwid, s_v_web_id…)
+right next to the login ones. They are bound to the browser and the IP that
+created them and live for minutes, so they reach the server already dead.
+A single one of them makes TikTok answer 403 Forbidden to every request, no
+matter how valid the sessionid sitting next to it is, and on top of that it
+stops yt-dlp from solving the JS challenge on its own — which is what makes
+TikTok work without any cookies at all.
 
-Симптом підступний: файл виглядає правильним, домени на місці, ключі
-на місці — а качати перестає геть усе, не лише вікові пости.
+The symptom is treacherous: the file looks right, the domains are there, the
+keys are there — and downloading stops working entirely, not just for
+age-restricted posts.
 """
 import unittest
 
@@ -51,21 +52,21 @@ class TestVolatileCookiesAreDropped(unittest.TestCase):
         for key in ("msToken", "ttwid", "s_v_web_id",
                     "tt_csrf_token", "odin_tt", "tt_chain_token"):
             with self.subTest(key=key):
-                self.assertNotIn(key, kept, "%s лишився — TikTok відповість 403" % key)
+                self.assertNotIn(key, kept, "%s survived — TikTok will answer 403" % key)
         self.assertEqual(dropped, 6)
 
     def test_login_keys_survive(self):
-        """Заради них усе й робиться — їх чіпати не можна."""
+        """This is the whole point of the exercise — they must not be touched."""
         kept = names_in(BOT.strip_volatile_cookies(FILE)[0])
-        self.assertEqual(kept.count("sessionid"), 2, "втрачено логін-ключ")
+        self.assertEqual(kept.count("sessionid"), 2, "a login key was lost")
         self.assertIn("csrftoken", kept)
 
     def test_other_sites_are_not_touched(self):
-        """Ті самі назви на чужому домені — не наша справа."""
+        """The same names on someone else's domain are none of our business."""
         text = "\n".join([row(".instagram.com", "ttwid"),
                           row(".example.com", "msToken")])
         clean, dropped = BOT.strip_volatile_cookies(text)
-        self.assertEqual(dropped, 0, "постраждала сесія іншого сайту")
+        self.assertEqual(dropped, 0, "another site's session got hurt")
         self.assertEqual(len(names_in(clean)), 2)
 
     def test_douyin_counts_as_tiktok(self):
@@ -75,12 +76,12 @@ class TestVolatileCookiesAreDropped(unittest.TestCase):
 
 
 class TestFileStaysValid(unittest.TestCase):
-    """Після чистки файл має лишитись файлом, який читає yt-dlp."""
+    """After sanitising, the file must still be a file yt-dlp can read."""
 
     def test_comments_and_header_survive(self):
         clean, _ = BOT.strip_volatile_cookies(FILE)
         self.assertTrue(clean.startswith("# Netscape"),
-                        "заголовок з'їли — yt-dlp не впізнає формат")
+                        "the header was eaten — yt-dlp will not recognise the format")
 
     def test_ends_with_a_newline(self):
         clean, _ = BOT.strip_volatile_cookies(FILE)
@@ -88,7 +89,7 @@ class TestFileStaysValid(unittest.TestCase):
         self.assertFalse(clean.endswith("\n\n"))
 
     def test_tabs_are_preserved(self):
-        """Формат Netscape тримається на табуляціях — пробіли його ламають."""
+        """The Netscape format rests on tabs — spaces break it."""
         clean, _ = BOT.strip_volatile_cookies(FILE)
         for line in clean.splitlines():
             if line.startswith("#"):
@@ -98,7 +99,7 @@ class TestFileStaysValid(unittest.TestCase):
 
     def test_result_still_parses(self):
         ok, info = BOT.parse_cookies_txt(BOT.strip_volatile_cookies(FILE)[0])
-        self.assertTrue(ok, "почищений файл перестав проходити валідацію")
+        self.assertTrue(ok, "the sanitised file stopped passing validation")
         self.assertIn("sessionid", info["auth"])
         self.assertIn("tiktok.com", info["domains"])
 
@@ -114,29 +115,29 @@ class TestFileStaysValid(unittest.TestCase):
 
 
 class TestItIsActuallyWiredIn(unittest.TestCase):
-    """Функція без виклику — мертвий код: файл збережеться брудним."""
+    """A function nobody calls is dead code: the file would be stored dirty."""
 
     def test_both_upload_paths_use_it(self):
-        """Оголошення + два шляхи прийому: файлом і вставленим текстом."""
+        """The definition plus two intake paths: a file and pasted text."""
         src = read("bot.py")
         self.assertEqual(src.count("strip_volatile_cookies("), 3,
-                         "чистка не підключена до обох шляхів прийому cookies")
+                         "sanitising is not wired into both cookie intake paths")
 
     def test_nothing_is_stored_unfiltered(self):
-        """store_cookies має отримувати вже почищений текст."""
+        """store_cookies must receive text that is already sanitised."""
         src = read("bot.py")
         for handler in ("async def on_cookies_document", "async def on_cookies_text"):
             block = src[src.index(handler):]
             block = block[:block.index("store_cookies(")]
             with self.subTest(handler=handler):
                 self.assertIn("strip_volatile_cookies(", block,
-                              "%s: зберігає файл до чистки" % handler)
+                              "%s: stores the file before sanitising" % handler)
 
     def test_the_reason_is_written_down(self):
-        """Список ключів виглядає випадковим — без пояснення його «почистять»."""
+        """The key list looks arbitrary — without a reason someone will "clean" it."""
         src = read("bot.py")
         preamble = src[:src.index("_VOLATILE_COOKIES = ")][-1500:]
-        self.assertIn("403", preamble, "не пояснено, чому ці ключі шкідливі")
+        self.assertIn("403", preamble, "does not say why these keys are harmful")
 
 
 if __name__ == "__main__":

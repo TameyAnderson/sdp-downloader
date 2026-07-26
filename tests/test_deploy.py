@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Конфіги деплою: саме тут ловились дублікати ключів і загублені змінні."""
+"""Deployment configs: duplicate keys and orphaned variables were caught here."""
 import re
 import unittest
 from pathlib import Path
@@ -12,7 +12,7 @@ COMPOSE = ("docker-compose.yml", "docker-compose.lite.yml")
 
 
 class StrictLoader(yaml.SafeLoader):
-    """Той самий YAML, але з падінням на дубльованому ключі — як у Portainer."""
+    """The same YAML, but it fails on a duplicate key — just like Portainer."""
 
 
 def _no_duplicates(loader, node, deep=False):
@@ -20,7 +20,7 @@ def _no_duplicates(loader, node, deep=False):
     for k, _v in node.value:
         key = loader.construct_object(k, deep=deep)
         if key in seen:
-            raise AssertionError("дубльований ключ: %r" % key)
+            raise AssertionError("duplicate key: %r" % key)
         seen.add(key)
     return yaml.SafeLoader.construct_mapping(loader, node, deep)
 
@@ -43,23 +43,23 @@ class TestCompose(unittest.TestCase):
         src = read("bot.py")
         known = set(re.findall(r'os\.getenv\("([A-Z_0-9]+)"', src))
         known |= {"ENABLE_" + s.upper() for s in re.findall(r'^    "(\w+)": \{', src, re.M)}
-        known |= {"YTDLP_CHANNEL", "AUTO_UPGRADE_YTDLP"}          # читає entrypoint.sh
+        known |= {"YTDLP_CHANNEL", "AUTO_UPGRADE_YTDLP"}          # read by entrypoint.sh
         for f in COMPOSE:
             env = load(f)["services"]["video-bot"]["environment"]
             unused = sorted(k for k in env if k not in known)
-            self.assertFalse(unused, "%s: змінні, яких ніхто не читає: %s" % (f, unused))
+            self.assertFalse(unused, "%s: variables nobody reads: %s" % (f, unused))
 
     def test_lite_stack_is_actually_lite(self):
         lite = load("docker-compose.lite.yml")
         services = lite["services"]
         always_on = [k for k, v in services.items() if not v.get("profiles")]
         self.assertEqual(sorted(always_on), ["cobalt-api", "video-bot"])
-        self.assertNotIn("volumes", lite, "LITE не має томів — він нічого не зберігає")
+        self.assertNotIn("volumes", lite, "LITE has no volumes — it stores nothing")
 
         env = services["video-bot"]["environment"]
         self.assertEqual(env["LITE"], "1")
         for forbidden in ("STATS_DB", "WEBAPP_ENABLED", "TELEGRAM_API_URL", "CACHE_FILE"):
-            self.assertNotIn(forbidden, env, "у LITE не місце для %s" % forbidden)
+            self.assertNotIn(forbidden, env, "%s has no place in LITE" % forbidden)
 
     def test_full_stack_has_the_optional_profiles(self):
         services = load("docker-compose.yml")["services"]
@@ -83,16 +83,17 @@ class TestDockerfile(unittest.TestCase):
                 neg = p.startswith("!")
                 if fnmatch.fnmatch(f, p[1:] if neg else p):
                     ignored = not neg
-            self.assertFalse(ignored, "%s потрібен в образі, але його ріже .dockerignore" % f)
+            self.assertFalse(ignored,
+                             "%s is needed in the image but .dockerignore cuts it" % f)
 
 
 class TestSecrets(unittest.TestCase):
     PATTERNS = {
-        "токен Telegram": r"\b\d{8,12}:[A-Za-z0-9_-]{35,}\b",
+        "Telegram token": r"\b\d{8,12}:[A-Za-z0-9_-]{35,}\b",
         "GitHub PAT": r"\b(gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})\b",
-        "приватний ключ": r"-----BEGIN [A-Z ]*PRIVATE KEY-----",
-        "токен Cloudflare": r"\beyJhIjoi[A-Za-z0-9_\-.=]{20,}",
-        "cookie сесії": r"sessionid=[A-Za-z0-9%]{15,}",
+        "private key": r"-----BEGIN [A-Z ]*PRIVATE KEY-----",
+        "Cloudflare token": r"\beyJhIjoi[A-Za-z0-9_\-.=]{20,}",
+        "session cookie": r"sessionid=[A-Za-z0-9%]{15,}",
     }
 
     def test_no_secrets_in_tracked_files(self):
@@ -109,14 +110,14 @@ class TestSecrets(unittest.TestCase):
             for name, pat in self.PATTERNS.items():
                 for m in re.finditer(pat, text):
                     if "xxxx" in m.group(0).lower() or m.group(0).startswith("123456789:AA"):
-                        continue                      # плейсхолдери в прикладах
+                        continue                      # placeholders in the examples
                     bad.append("%s: %s" % (path.name, name))
-        self.assertFalse(bad, "схоже на секрет у репозиторії: %s" % bad)
+        self.assertFalse(bad, "looks like a secret in the repository: %s" % bad)
 
     def test_gitignore_covers_the_dangerous_files(self):
         rules = read(".gitignore")
         for needed in ("cookies", ".env", "*.db", "cache.json"):
-            self.assertIn(needed, rules, "%s має бути в .gitignore" % needed)
+            self.assertIn(needed, rules, "%s must be in .gitignore" % needed)
 
 
 if __name__ == "__main__":

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""LITE: тільки групи, нічого на диску, жодних важких можливостей."""
+"""LITE: groups only, nothing on disk, none of the heavy features."""
 import os
 import unittest
 
@@ -8,7 +8,7 @@ from helper import load_bot
 
 class TestLiteState(unittest.TestCase):
     def setUp(self):
-        # Навмисно вмикаємо все, що LITE має придушити.
+        # Deliberately switch on everything LITE is supposed to suppress.
         self.bot = load_bot(LITE=1, ENABLE_CACHE=1, WEBAPP_ENABLED=1)
         self.bot.db_init()
         self.bot.settings_load_sync()
@@ -18,14 +18,16 @@ class TestLiteState(unittest.TestCase):
         self.bot.set_setting_sync("max_height", 1080)
         self.bot._db_record_sync((1,) * 12)
         self.bot.settings_load_sync()
-        self.assertFalse(os.path.exists(self.bot.STATS_DB), "LITE не має створювати базу")
-        self.assertFalse(os.path.exists(self.bot.CACHE_FILE), "LITE не має створювати кеш")
+        self.assertFalse(os.path.exists(self.bot.STATS_DB),
+                         "LITE must not create a database")
+        self.assertFalse(os.path.exists(self.bot.CACHE_FILE),
+                         "LITE must not create a cache")
 
     def test_cache_forced_off(self):
         self.assertFalse(self.bot.cache_enabled())
 
     def test_miniapp_forced_off(self):
-        self.assertFalse(self.bot.WEBAPP_ENABLED, "Mini App у LITE не піднімається ніколи")
+        self.assertFalse(self.bot.WEBAPP_ENABLED, "the Mini App never starts in LITE")
 
     def test_settings_cannot_be_saved(self):
         self.bot.set_setting_sync("max_height", 4320)
@@ -39,7 +41,7 @@ class TestLiteAccess(unittest.TestCase):
         self.assertEqual(bot.resolve_access(5, "u", -100123, True), "lite")
         self.assertEqual(bot.resolve_access(5, "u", 5, False), "none")
         self.assertEqual(bot.resolve_access(777, "u", 777, False), "none",
-                         "у LITE навіть адмін не качає в приваті")
+                         "in LITE not even the admin downloads in private")
 
     def test_allowed_chats(self):
         bot = load_bot(LITE=1, ALLOWED_CHATS="-100123, -100456")
@@ -52,7 +54,7 @@ class TestLiteAccess(unittest.TestCase):
         self.assertEqual(bot.resolve_access(5, "u", -100999, True), "lite")
 
     def test_lite_level_is_not_extended(self):
-        """Саме звідси випливає: без довгого YouTube, mp3, плейлистів і обрізки."""
+        """This is what rules out long YouTube, mp3, playlists and trimming."""
         bot = load_bot(LITE=1)
         level = bot.resolve_access(5, "u", -100123, True)
         self.assertNotIn(level, ("extended", "admin"))
@@ -66,15 +68,15 @@ class TestLiteEnvSwitches(unittest.TestCase):
     def test_titles_mode_from_env(self):
         self.assertEqual(load_bot(LITE=1).titles_mode(), "private")
         self.assertEqual(load_bot(LITE=1, TITLES_MODE="off").titles_mode(), "off")
-        self.assertEqual(load_bot(LITE=1, TITLES_MODE="дурня").titles_mode(), "private")
+        self.assertEqual(load_bot(LITE=1, TITLES_MODE="nonsense").titles_mode(), "private")
 
     def test_language_from_env(self):
         self.assertEqual(load_bot(LITE=1, BOT_LANG="en").cur_lang(), "en")
-        self.assertEqual(load_bot(LITE=1, BOT_LANG="кхм").cur_lang(), "uk")
+        self.assertEqual(load_bot(LITE=1, BOT_LANG="ahem").cur_lang(), "uk")
 
 
 class TestFullNotAffected(unittest.TestCase):
-    """Найважливіше: LITE не має нічого зламати у звичайному режимі."""
+    """The important one: LITE must not break anything in the normal mode."""
 
     def test_full_still_writes_and_serves(self):
         bot = load_bot(WEBAPP_ENABLED=1)

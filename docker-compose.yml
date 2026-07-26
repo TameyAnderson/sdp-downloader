@@ -98,7 +98,11 @@ services:
       # --- оновлення yt-dlp і сповіщення про нові версії бота ---
       # GITHUB_REPO unset -> watch upstream; "off" -> no notifications.
       # GITHUB_REPO не задано -> стежимо за апстрімом; "off" -> не сповіщати.
-      YTDLP_CHANNEL: ${YTDLP_CHANNEL:-master}
+      # nightly = master code built daily, but with a real dated version;
+      # the master tarball always reports the last release number instead.
+      # nightly = той самий код master, зібраний щодня, але зі справжньою
+      # датованою версією; тарбол master рапортує номер останнього релізу.
+      YTDLP_CHANNEL: ${YTDLP_CHANNEL:-nightly}
       GITHUB_REPO: ${GITHUB_REPO:-}
       GITHUB_BRANCH: ${GITHUB_BRANCH:-main}
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
