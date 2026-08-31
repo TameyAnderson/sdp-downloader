@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """Live settings: a value from the panel must take effect at once and stay in range."""
+import re
 import unittest
 
 from helper import load_bot, read
@@ -138,11 +139,26 @@ class TestTikTokGoesThroughTheApi(unittest.TestCase):
         self.assertNotIn("--extractor-args", " ".join(off._with_auth([], self.TIKTOK)))
 
     def test_every_call_site_passes_the_url(self):
-        """A forgotten url = a silent fall back to the broken page parsing."""
+        """A forgotten url = a silent fall back to the broken page parsing.
+
+        Counting call sites would be simpler, but then every new — correct —
+        one breaks the test. What matters is that none of them is called with
+        a single argument.
+        """
         src = read("bot.py")
-        self.assertNotIn("_with_auth(args)", src,
-                         "called without the link somewhere — TikTok goes back to HTML")
-        self.assertEqual(src.count("_with_auth(args, url)"), 5)
+        bare = []
+        for line in src.splitlines():
+            stripped = line.lstrip()
+            if stripped.startswith("def ") or stripped.startswith("#"):
+                continue                      # the definition, and prose about it
+            m = re.search(r"_with_auth\(([^)]*)\)", line)
+            if not m or not m.group(1).strip():
+                continue                      # "_with_auth()" in a docstring
+            if "," not in m.group(1):
+                bare.append(line.strip())
+        self.assertFalse(bare, "no link passed — TikTok falls back to HTML: %s" % bare)
+        self.assertGreaterEqual(src.count("_with_auth(args, url)"), 5,
+                                "the call sites went missing altogether")
 
 
 class TestAccess(unittest.TestCase):
