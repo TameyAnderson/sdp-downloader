@@ -63,6 +63,28 @@ class TestReleaseWorkflow(unittest.TestCase):
                      "--list-impersonate-targets"):
             self.assertIn(tool, script, "the smoke test does not check %s" % tool)
 
+    def test_a_tag_is_always_produced(self):
+        """An empty tag list kills the build with a message about nothing.
+
+        semver wants three parts, so a two-part tag like v1.1 makes every
+        `type=semver` pattern yield nothing at all, and buildx then fails with
+        "tag is needed when pushing to registry". `type=ref,event=tag` takes
+        the git tag verbatim and keeps the list non-empty whatever happens.
+        """
+        step = next(s for s in self.job["steps"] if s.get("id") == "meta")
+        tags = step["with"]["tags"]
+        self.assertIn("type=ref,event=tag", tags,
+                      "a non-semver tag would produce an empty list")
+        self.assertIn("type=raw,value=edge", tags, "a push to main needs a tag too")
+
+    def test_empty_tag_list_fails_loudly(self):
+        names = [s.get("name", "") for s in self.job["steps"]]
+        guard = next(i for i, n in enumerate(names) if "something to tag" in n.lower())
+        build = next(i for i, n in enumerate(names) if n == "Build and push")
+        self.assertLess(guard, build, "the check must run before the build")
+        self.assertIn("v1.2.3", self.job["steps"][guard]["run"],
+                      "the error should say what a correct tag looks like")
+
     def test_release_only_on_tags(self):
         step = next(s for s in self.job["steps"] if "release" in s.get("name", "").lower())
         self.assertIn("refs/tags/v", step["if"])

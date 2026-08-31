@@ -58,15 +58,41 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ steps.img.outputs.name }}
           tags: |
+            # A two-part tag like v1.1 is NOT valid semver — semver wants three
+            # parts — and the patterns below then quietly yield nothing, after
+            # which buildx dies with "tag is needed when pushing to registry".
+            # This first line is the safety net: the git tag is taken verbatim,
+            # whatever shape it has, so the tag list is never empty.
+            # Дволанковий тег на кшталт v1.1 — НЕ валідний semver (потрібні три
+            # частини), і шаблони нижче тихо не дають нічого, після чого buildx
+            # падає з "tag is needed when pushing to registry". Цей перший рядок
+            # і є страховкою: тег береться як є, тож список ніколи не порожній.
+            type=ref,event=tag
             type=semver,pattern=v{{version}}
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
             type=raw,value=edge,enable={{is_default_branch}}
           labels: |
             org.opencontainers.image.title=s.d.p downloader
             org.opencontainers.image.description=Self-hosted Telegram bot for downloading video and audio
             org.opencontainers.image.licenses=MIT
+
+      # buildx reports an empty tag list as "tag is needed when pushing to
+      # registry", which says nothing about the cause. Fail here instead, while
+      # it is still obvious what went wrong.
+      # buildx повідомляє про порожній список тегів як "tag is needed when
+      # pushing to registry" — про причину ні слова. Падаємо тут, поки ще
+      # видно, що саме сталося.
+      - name: Make sure there is something to tag
+        run: |
+          if [ -z "${{ steps.meta.outputs.tags }}" ]; then
+            echo "::error::No image tags were produced for ${{ github.ref }}."
+            echo "::error::A version tag must look like v1.2.3 — three parts."
+            exit 1
+          fi
+          echo "${{ steps.meta.outputs.tags }}"
 
       - name: Build and push
         uses: docker/build-push-action@v6
