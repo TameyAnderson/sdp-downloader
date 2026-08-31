@@ -1816,6 +1816,72 @@ async def send_media(bot, message, items, source, strict=False):
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+async def ytdlp_photos(url):
+    """Image URLs of a post that carries no video at all. [] if there are none.
+
+    An Instagram photo post — single or a carousel — makes every video engine
+    give up: yt-dlp reports "No video formats found!" and Cobalt answers
+    error.api.fetch.empty. The post is still perfectly readable, it simply has
+    pictures instead of a video, so we ask yt-dlp for the metadata with
+    --ignore-no-formats-error (without it the same error stops the dump too)
+    and take the largest thumbnail of every entry.
+    Фото-пост в Instagram — одиничний чи карусель — валить усі відео-рушії:
+    yt-dlp каже "No video formats found!", Cobalt — error.api.fetch.empty.
+    Пост при цьому цілком читабельний, просто в ньому картинки замість відео,
+    тому просимо метадані з --ignore-no-formats-error (без нього та сама
+    помилка обриває і дамп) і беремо найбільшу мініатюру кожного елемента.
+    """
+    args = ["yt-dlp", "--dump-single-json", "--skip-download", "--no-warnings",
+            "--ignore-no-formats-error", "--yes-playlist"] + common_ytdlp()
+    _with_auth(args, url)
+    args.append(url)
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
+        out, _ = await asyncio.wait_for(proc.communicate(), timeout=60)
+        data = json.loads((out or b"{}").decode("utf-8", "ignore") or "{}")
+    except Exception:  # noqa: BLE001
+        logger.info("photo lookup failed: %s", url)
+        return []
+
+    return photos_from_dump(data)[:tunable("playlist_max")]
+
+
+def _best_image(node):
+    """The largest thumbnail of one entry, or its direct image URL."""
+    thumbs = [t for t in (node.get("thumbnails") or []) if t.get("url")]
+    if thumbs:
+        # yt-dlp orders thumbnails worst -> best, but the order is not
+        # guaranteed, so pick by area rather than by position.
+        # yt-dlp вкладає мініатюри від гіршої до кращої, але порядок не
+        # гарантований — тому беремо за площею, а не за позицією.
+        thumbs.sort(key=lambda t: (t.get("width") or 0) * (t.get("height") or 0))
+        return thumbs[-1]["url"]
+    return node.get("display_url") or node.get("thumbnail")
+
+
+def photos_from_dump(data):
+    """Image URLs out of a yt-dlp JSON dump, in the order of the post."""
+    if not isinstance(data, dict):
+        return []
+    entries = data.get("entries")
+    nodes = entries if isinstance(entries, list) and entries else [data]
+    photos = []
+    for node in nodes:
+        if not isinstance(node, dict):
+            continue
+        # An entry that does have formats is a video — it belongs to the video
+        # path, and coming through here it would arrive as a still frame.
+        # Елемент, у якого формати є, — це відео: воно належить відео-шляху,
+        # а через цей шлях приїхало б стоп-кадром.
+        if node.get("formats") or str(node.get("url") or "").endswith(".mp4"):
+            continue
+        link = _best_image(node)
+        if link and link not in photos:
+            photos.append(link)
+    return photos
+
+
 async def fetch_title(url):
     """Ask yt-dlp for the title only (no download). Returns None on failure."""
     args = ["yt-dlp", "--no-playlist", "--skip-download", "--no-warnings",
@@ -2247,6 +2313,18 @@ async def _do_process(bot, message, url, is_private, want_audio, plat, source):
         if COBALT_FALLBACK_URL and await handle_cobalt(bot, message, dl_url, COBALT_FALLBACK_URL):
             logger.info("Sent via secondary Cobalt: %s", dl_url)
             return "sent", source
+        # Last resort: the post may simply have no video in it. Photo posts and
+        # photo carousels fail every engine above with "No video formats found",
+        # which reads like a breakage while the post is fine — it is pictures.
+        # Остання спроба: у пості може просто не бути відео. Фото-пости й фото-
+        # каруселі валять усі рушії вище з "No video formats found", і це схоже
+        # на поломку, хоча пост цілий — там картинки.
+        photos = await ytdlp_photos(dl_url)
+        if photos:
+            logger.info("No video, sending %d photo(s): %s", len(photos), dl_url)
+            if await send_media(bot, message, [("photo", p) for p in photos],
+                                "%s_photos" % plat):
+                return "sent", "%s_photos" % plat
         await message.reply(t("cant_video"))
         return "fail", source
 

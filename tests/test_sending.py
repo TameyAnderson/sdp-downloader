@@ -123,6 +123,68 @@ class TestSoundtrackReusesTheDownload(unittest.TestCase):
                       "with the soundtrack off the file stays in /tmp forever")
 
 
+class TestPhotoPosts(unittest.TestCase):
+    """A post with no video in it must not read as a failure.
+
+    An Instagram photo post — single or a carousel — makes every video engine
+    give up: yt-dlp says "No video formats found!", Cobalt answers
+    error.api.fetch.empty. The user only saw "couldn't download", although the
+    post was fine and simply held pictures.
+    """
+
+    @staticmethod
+    def thumb(url, w, h):
+        return {"url": url, "width": w, "height": h}
+
+    def test_carousel_keeps_every_photo_in_order(self):
+        data = {"entries": [{"thumbnails": [self.thumb("small%d" % i, 150, 150),
+                                            self.thumb("big%d" % i, 1080, 1080)]}
+                            for i in range(10)]}
+        self.assertEqual(BOT.photos_from_dump(data),
+                         ["big%d" % i for i in range(10)])
+
+    def test_single_photo_post_has_no_entries(self):
+        data = {"thumbnails": [self.thumb("a", 320, 320), self.thumb("b", 1440, 1440)]}
+        self.assertEqual(BOT.photos_from_dump(data), ["b"])
+
+    def test_the_largest_thumbnail_wins(self):
+        """Order in the dump is not guaranteed — size is what matters."""
+        data = {"thumbnails": [self.thumb("huge", 2000, 2000), self.thumb("tiny", 10, 10)]}
+        self.assertEqual(BOT.photos_from_dump(data), ["huge"])
+
+    def test_video_entries_are_skipped(self):
+        """A video would come through here as a single still frame."""
+        data = {"entries": [{"formats": [{"url": "v.mp4"}],
+                             "thumbnails": [self.thumb("frame", 9, 9)]},
+                            {"thumbnails": [self.thumb("photo", 100, 100)]}]}
+        self.assertEqual(BOT.photos_from_dump(data), ["photo"])
+
+    def test_duplicates_are_dropped(self):
+        data = {"entries": [{"thumbnails": [self.thumb("x", 1, 1)]}, {"display_url": "x"}]}
+        self.assertEqual(BOT.photos_from_dump(data), ["x"])
+
+    def test_junk_does_not_crash_it(self):
+        for junk in ({}, None, {"entries": [None, "junk"]}, {"entries": []}):
+            with self.subTest(data=junk):
+                self.assertEqual(BOT.photos_from_dump(junk), [])
+
+    def test_the_dump_ignores_the_no_formats_error(self):
+        """Without this flag the same error stops the metadata dump as well."""
+        src = read("bot.py")
+        block = src[src.index("async def ytdlp_photos"):]
+        block = block[:block.index("def _best_image")]
+        self.assertIn("--ignore-no-formats-error", block)
+        self.assertIn("--dump-single-json", block)
+
+    def test_photos_are_only_a_last_resort(self):
+        """Videos must keep going the video way — this runs after everyone failed."""
+        src = read("bot.py")
+        block = src[src.index("        if COBALT_FALLBACK_URL"):]
+        block = block[:block.index('return "fail", source')]
+        self.assertLess(block.index("ytdlp_photos(dl_url)"), block.index('t("cant_video")'),
+                        "the bot gives up before it looks for photos")
+
+
 class TestExternalTextInAdminMessages(unittest.TestCase):
     """Commit messages and error texts get interpolated into admin messages too."""
 
