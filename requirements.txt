@@ -1,5 +1,5 @@
 # Telegram bot framework / Фреймворк для Telegram-бота
-aiogram==3.30.0
+aiogram==3.31.0
 
 # The downloader itself. Pinned here, but the container can pull a fresher
 # build at startup — see AUTO_UPGRADE_YTDLP and YTDLP_CHANNEL.
@@ -12,7 +12,7 @@ aiogram==3.30.0
 # Екстра "curl-cffi" дає yt-dlp змогу вдавати TLS-відбиток справжнього
 # браузера. Без неї TikTok відповідає 403 Forbidden на будь-який запит,
 # навіть із дійсними cookies — та сама екстра є і в entrypoint.sh.
-yt-dlp[default,curl-cffi]==2026.7.4
+yt-dlp[default,curl-cffi]==2026.8.19
 
 # PO token provider for getting past YouTube protection
 # (works together with the bgutil-provider container).

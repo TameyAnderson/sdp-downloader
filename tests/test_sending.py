@@ -78,6 +78,51 @@ class TestTitleSafety(unittest.TestCase):
         self.assertEqual(off.titles_mode(), "off")
 
 
+class TestSoundtrackReusesTheDownload(unittest.TestCase):
+    """The separate MP3 must not cost a second extraction.
+
+    TikTok throttles a repeat request for the same post seconds later and
+    answers with something yt-dlp cannot parse:
+
+        ERROR: [TikTok] ...: Unexpected response from webpage request
+
+    The video had already been sent by then, so the failure showed up only as
+    a missing soundtrack. Cutting the track out of the file already on disk
+    removes the request entirely.
+    """
+
+    def test_the_sent_file_is_kept_before_cleanup(self):
+        src = read("bot.py")
+        block = src[src.index("async def try_ytdlp_send"):]
+        block = block[:block.index("async def try_ytdlp_audio")]
+        keep = block.index("keep_for_soundtrack(video)")
+        wipe = block.index("cleanup(video)")
+        self.assertLess(keep, wipe, "the file is deleted before it can be reused")
+
+    def test_local_file_is_tried_before_the_network(self):
+        src = read("bot.py")
+        block = src[src.index("async def try_ytdlp_audio"):]
+        block = block[:block.index("finally:")]
+        local = block.index("ffmpeg_extract_mp3(")
+        remote = block.index("ytdlp_audio(url)")
+        self.assertLess(local, remote, "it still goes to the network first")
+
+    def test_the_network_path_is_still_there(self):
+        """Cobalt and carousels have no local file — the fallback must stay."""
+        src = read("bot.py")
+        self.assertIn("audio_path, error = await ytdlp_audio(url)", src)
+
+    def test_nothing_is_left_on_disk(self):
+        src = read("bot.py")
+        block = src[src.index("async def try_ytdlp_audio"):]
+        self.assertIn("cleanup(local_src)", block, "the kept file is never removed")
+        # the early return in _maybe_soundtrack must clear it too
+        soundtrack = src[src.index("async def _maybe_soundtrack"):]
+        soundtrack = soundtrack[:soundtrack.index("return")]
+        self.assertIn("cleanup(_AUDIO_SRC.get())", soundtrack,
+                      "with the soundtrack off the file stays in /tmp forever")
+
+
 class TestExternalTextInAdminMessages(unittest.TestCase):
     """Commit messages and error texts get interpolated into admin messages too."""
 

@@ -406,7 +406,7 @@
         ck_send_hint:"Щоб оновити — надішли файл cookies.txt боту в приват.",
         ck_on:"Активні", ck_soon:"Скоро спливуть", ck_dead:"Протерміновані", ck_off:"Не підключені",
         ck_days:"лишилось ~{d} дн.", ck_none:"без терміну",
-        ck_upd:"оновлено", ck_keys:"ключі",
+        ck_upd:"додано", ck_keys:"ключі", ck_until:"до", ck_by:"рахунок за",
         ck_off_hint:"Доступні лише публічні пости. Надішли cookies.txt боту в приват.",
         limits_label:"Навантаження та ліміти",
         limits_hint:"Діють одразу, без перезапуску. Порожнє поле = значення з env.",
@@ -493,7 +493,7 @@
         ck_send_hint:"To refresh — send a cookies.txt file to the bot in private.",
         ck_on:"Active", ck_soon:"Expiring soon", ck_dead:"Expired", ck_off:"Not connected",
         ck_days:"~{d} days left", ck_none:"no expiry",
-        ck_upd:"updated", ck_keys:"keys",
+        ck_upd:"added", ck_keys:"keys", ck_until:"until", ck_by:"counted from",
         ck_off_hint:"Only public posts are available. Send cookies.txt to the bot in private.",
         limits_label:"Load & limits",
         limits_hint:"Applied instantly, no restart. Empty field = value from env.",
@@ -710,6 +710,13 @@
       if (r.status === 403) return { forbidden: true };
       return r.json();
     }
+    function stamp(ts) {
+      const d = new Date(ts * 1000);
+      const p = n => String(n).padStart(2, "0");
+      return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} `
+           + `${p(d.getHours())}:${p(d.getMinutes())}`;
+    }
+
     function ago(ts) {
       const s = Math.floor(Date.now()/1000 - ts);
       if (s < 60) return s + tr("ago_s");
@@ -836,7 +843,21 @@
       const bits = [];
       if (info.sites && info.sites.length) bits.push(info.sites.join(", "));
       if (info.keys && info.keys.length) bits.push(tr("ck_keys") + ": " + info.keys.join(", "));
-      if (info.updated) bits.push(tr("ck_upd") + " " + ago(info.updated));
+      // Absolute date, not just "N days ago": you cannot tell from a relative
+      // string how long a file has actually been sitting there.
+      // Абсолютна дата, а не саме лише «N днів тому»: за відносним рядком не
+      // зрозуміти, скільки файл насправді лежить.
+      if (info.updated) bits.push(tr("ck_upd") + " " + stamp(info.updated)
+                                  + " (" + ago(info.updated) + ")");
+      // Which key the countdown comes from. A day count that never moves is
+      // almost always a key whose expiry the site never renews — showing the
+      // key and its date makes that visible instead of looking like a bug.
+      // З якого ключа береться залишок. Кількість днів, що не рухається, — це
+      // майже завжди ключ, якому сайт не подовжує термін; ключ і дата роблять
+      // це видимим, замість того щоб виглядати багом.
+      if (info.expires) bits.push(tr("ck_until") + " " + stamp(info.expires)
+                                  + (info.expires_key ? ", " + tr("ck_by") + " "
+                                     + info.expires_key : ""));
       box.innerHTML = `<div class="ckhead"><span class="dot" style="background:${color}"></span>`
         + `<span>${label}</span><span class="muted" style="margin-left:auto">${left}</span></div>`
         + `<div class="ckmeta">${bits.join(" · ")}</div>`;

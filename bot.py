@@ -1429,6 +1429,55 @@ async def ytdlp_download(url, height, fmt=None):
     )
 
 
+# The video we just sent, kept aside so the separate MP3 can be cut out of it.
+# Відео, яке щойно відправили, лишається збоку — щоб вирізати з нього MP3.
+_AUDIO_SRC = contextvars.ContextVar("audio_src", default=None)
+
+
+def keep_for_soundtrack(path):
+    """Move the sent file aside instead of deleting it right away.
+
+    TikTok throttles a second extraction of the same post moments later and
+    replies with something yt-dlp cannot parse ("Unexpected response from
+    webpage request"), so the video went through while the separate MP3 failed.
+    ffmpeg on the file we already hold needs no network at all.
+    TikTok притискає повторне видобування того самого поста за кілька секунд і
+    віддає щось, чого yt-dlp не розбирає ("Unexpected response from webpage
+    request"): відео йшло, а окремий MP3 падав. ffmpeg по вже наявному файлу
+    не ходить у мережу взагалі.
+    """
+    if path is None or not audio_too_enabled():
+        return
+    try:
+        keep = Path(tempfile.gettempdir()) / ("vbot_snd_" + uuid.uuid4().hex + path.suffix)
+        shutil.move(str(path), str(keep))
+        _AUDIO_SRC.set(keep)
+    except Exception:  # noqa: BLE001
+        logger.info("could not keep the file for the soundtrack")
+
+
+async def ffmpeg_extract_mp3(src):
+    """Cut an MP3 out of a local file. Returns the path or None."""
+    out = src.with_name(src.stem + "-audio.mp3")
+    args = ["ffmpeg", "-y", "-loglevel", "error", "-i", str(src), "-vn",
+            "-acodec", "libmp3lame",
+            "-b:a", "%dk" % (_ABR.get() or 192)]
+    title = _TITLE.get()
+    if title:
+        args += ["-metadata", "title=" + title[:120]]
+    args.append(str(out))
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *args, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.PIPE)
+        _, err = await asyncio.wait_for(proc.communicate(), timeout=120)
+        if out.exists() and out.stat().st_size > 0:
+            return out
+        logger.info("ffmpeg gave no audio: %s", (err or b"").decode("utf-8", "ignore")[:200])
+    except Exception:  # noqa: BLE001
+        logger.info("ffmpeg audio extraction failed")
+    return None
+
+
 async def ytdlp_audio(url):
     work_dir = Path(tempfile.gettempdir()) / ("vbot_" + uuid.uuid4().hex)
     work_dir.mkdir(parents=True, exist_ok=True)
@@ -1960,6 +2009,7 @@ async def try_ytdlp_send(bot, message, dl_url, ladder, prefer_merge, allow_silen
             return "toobig", None
         return "fail", None
     finally:
+        keep_for_soundtrack(video)
         cleanup(video)
         cleanup(best_effort)
 
@@ -1967,10 +2017,19 @@ async def try_ytdlp_send(bot, message, dl_url, ladder, prefer_merge, allow_silen
 async def try_ytdlp_audio(bot, message, url):
     """Extract MP3 and send it named after the source. Returns (status, sent_msg)."""
     audio_path = None
+    local_src = _AUDIO_SRC.get()
+    _AUDIO_SRC.set(None)
     try:
-        audio_path, error = await ytdlp_audio(url)
-        if error:
-            return "fail", None
+        # Prefer the file we already downloaded — no second request, so no
+        # throttling and no repeated extraction failure.
+        # Спершу — файл, який уже завантажили: жодного другого запиту, отже
+        # ні притискання, ні повторного падіння видобування.
+        if local_src is not None and local_src.exists():
+            audio_path = await ffmpeg_extract_mp3(local_src)
+        if audio_path is None:
+            audio_path, error = await ytdlp_audio(url)
+            if error:
+                return "fail", None
         if audio_path.stat().st_size > MAX_FILE_SIZE:
             await message.reply(t("too_big_audio", mb=MAX_FILE_SIZE // 1024 // 1024))
             return "toobig", None
@@ -1995,6 +2054,7 @@ async def try_ytdlp_audio(bot, message, url):
         return "sent", sent
     finally:
         cleanup(audio_path)
+        cleanup(local_src)
 
 
 async def _video_with_cache(bot, message, cache_url, dl_url, ladder, prefer_merge,
@@ -2145,6 +2205,10 @@ async def _do_process(bot, message, url, is_private, want_audio, plat, source):
         async def _maybe_soundtrack():
             """Optionally send the audio of a short video as a separate MP3."""
             if not audio_too_enabled() or svc.get("audio") or long_video:
+                # Nobody will cut a soundtrack out of it — do not leave it lying around.
+                # Ніхто не різатиме з нього доріжку — не лишаємо файл валятися.
+                cleanup(_AUDIO_SRC.get())
+                _AUDIO_SRC.set(None)
                 return
             try:
                 st_a, sent_a = await try_ytdlp_audio(bot, message, dl_url)
@@ -2437,6 +2501,8 @@ def cookies_status():
         "sites": info.get("domains", []),
         "keys": info.get("auth", []),
         "updated": updated,
+        "expires": info.get("expires"),
+        "expires_key": info.get("expires_key"),
     }
 
 
@@ -2932,7 +2998,7 @@ def parse_cookies_txt(text):
         rows.append((parts[0], parts[4], parts[5], parts[6]))
     if not rows:
         return False, {"reason": "empty"}
-    domains, names, soonest = set(), set(), None
+    domains, names, soonest, soonest_key = set(), set(), None, None
     now = time.time()
     for dom, exp, name, val in rows:
         if not val:
@@ -2946,7 +3012,7 @@ def parse_cookies_txt(text):
         # Only auth cookies matter for the lifetime: technical ones (wd, rur…)
         # expire quickly and would understate how long the session lasts.
         if e and name in _COOKIE_KEYS and (soonest is None or e < soonest):
-            soonest = e
+            soonest, soonest_key = e, name
     have = [k for k in _COOKIE_KEYS if k in names]
     if not have:
         return False, {"reason": "no_auth", "domains": sorted(domains)}
@@ -2961,6 +3027,14 @@ def parse_cookies_txt(text):
         "domains": sorted(d for d in domains if "." in d)[:4],
         "auth": have,
         "days": days,
+        # Which key the countdown is taken from, and when exactly it dies.
+        # Without this a frozen day count looks like a bug in the panel, while
+        # it is usually a key whose expiry the site simply never renews.
+        # З якого ключа рахується залишок і коли саме він помре. Без цього
+        # завмерла кількість днів виглядає як баг панелі, хоча зазвичай це
+        # ключ, якому сайт просто не подовжує термін.
+        "expires": soonest,
+        "expires_key": soonest_key,
     }
 
 
