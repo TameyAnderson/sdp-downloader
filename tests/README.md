@@ -11,6 +11,28 @@ python -m unittest discover -s . -p "test_*.py" -v
 
 CI runs exactly this on every push.
 
+## Running them before you push
+
+Finding out from a red CI badge is finding out too late. This runs the same
+checks locally and needs nothing installed — without a local Python carrying
+`aiogram`, it falls back to Docker:
+
+```bash
+sh tests/run.sh          # tests and the Mini App JS
+sh tests/run.sh --all    # plus the image build and both compose files
+```
+
+To have it happen on its own, install it as a git hook — one command, from the
+project root:
+
+```bash
+printf '#!/bin/sh\nsh tests/run.sh || { s=$?; [ "$s" = 2 ] && exit 0; echo "tests failed, push stopped (git push --no-verify to override)"; exit 1; }\n' \
+  > .git/hooks/pre-push && chmod +x .git/hooks/pre-push
+```
+
+`git push --no-verify` skips it, `rm .git/hooks/pre-push` removes it. Hooks are
+not versioned, so this stays in your clone only.
+
 ## What is covered
 
 | File | About |
