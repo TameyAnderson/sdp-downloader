@@ -42,6 +42,10 @@ class TestCompose(unittest.TestCase):
     def test_every_env_var_is_read_by_the_code(self):
         src = read("bot.py")
         known = set(re.findall(r'os\.getenv\("([A-Z_0-9]+)"', src))
+        # Secrets go through a helper that builds the name at run time, so a
+        # plain os.getenv search does not see them.
+        secrets = set(re.findall(r'env_secret\("([A-Z_0-9]+)"', src))
+        known |= secrets | {s + "_FILE" for s in secrets}
         known |= {"ENABLE_" + s.upper() for s in re.findall(r'^    "(\w+)": \{', src, re.M)}
         known |= {"YTDLP_CHANNEL", "AUTO_UPGRADE_YTDLP"}          # read by entrypoint.sh
         for f in COMPOSE:

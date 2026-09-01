@@ -60,6 +60,11 @@ services:
       # Лежить на volume botdata -> переживає передеплой. Файл можна просто
       # надіслати боту в приват — він сам збереже сюди.
       COOKIES_FILE: ${COOKIES_FILE:-/data/cookies.txt}
+      # The same session, written out again in Cobalt's format so the fallback
+      # is logged in too. Empty value = do not write it.
+      # Та сама сесія, записана ще раз у форматі Cobalt, щоб і запасний рушій
+      # був залогінений. Порожнє значення — не записувати.
+      COBALT_COOKIES_PATH: ${COBALT_COOKIES_PATH:-/cookies/cookies.json}
       COOKIES_WARN_DAYS: ${COOKIES_WARN_DAYS:-3}
       COOKIES_MAX_BYTES: ${COOKIES_MAX_BYTES:-262144}
       PROXY: ${PROXY:-}
@@ -113,10 +118,25 @@ services:
     # Downloads are temporary and live in RAM (/tmp); the file_id cache sits
     # on a persistent volume.
     # Тимчасові завантаження — у RAM (/tmp), кеш file_id — на постійному volume.
+    # 1 GB is plenty for short clips. Merging needs room for the video, the
+    # audio and the result at once — about twice the final size — so with
+    # MAX_FILE_MB raised for the local Bot API this ceiling becomes the real
+    # limit, and downloads fail with "No space left on device". Raise the size
+    # here, or set WORK_DIR to a directory on the botdata volume. The bot logs
+    # a warning at startup when the two do not add up.
+    # 1 ГБ вистачає для коротких кліпів. Для склейки потрібне місце одночасно
+    # під відео, аудіо й результат — приблизно вдвічі більше за кінцевий розмір
+    # — тож із піднятим заради локального Bot API MAX_FILE_MB саме ця стеля
+    # стає справжнім лімітом, і завантаження падають із "No space left on
+    # device". Або збільш розмір тут, або вкажи WORK_DIR у теці на томі
+    # botdata. Бот на старті попереджає в лозі, коли числа не сходяться.
     tmpfs:
       - /tmp:size=1g
     volumes:
       - botdata:/data
+      # Written by the bot, read by Cobalt — see COBALT_COOKIES_PATH above.
+      # Пише бот, читає Cobalt — див. COBALT_COOKIES_PATH вище.
+      - cobaltcookies:/cookies
       # Local Bot API storage (profile bigfiles): the bot reads files you send
       # to the chat (e.g. cookies.txt) from here. Read-only.
       # Сховище локального Bot API (профіль bigfiles): звідти бот читає файли,
@@ -159,6 +179,20 @@ services:
     environment:
       API_URL: "http://cobalt-api:9010/"
       API_PORT: "9010"
+      # The same session the bot uses, in Cobalt's own format. Cobalt is the
+      # fallback for exactly the sites that need a login, so without this it
+      # was logged out at the moment it was supposed to help.
+      # Та сама сесія, що й у бота, у власному форматі Cobalt. Cobalt — запасний
+      # варіант саме для сайтів, де потрібен логін, тож без цього він був
+      # незалогінений рівно тоді, коли мав виручити.
+      COOKIE_PATH: "/cookies/cookies.json"
+      # Leave at "never". "always" makes Cobalt return separate streams for the
+      # client to merge, which this bot has no code for.
+      # Лишай "never". За "always" Cobalt повертає окремі доріжки, які клієнт
+      # має склеїти сам, а такого коду в бота немає.
+      FORCE_LOCAL_PROCESSING: "never"
+    volumes:
+      - cobaltcookies:/cookies
     tmpfs:
       - /tmp                    # Cobalt writes temp files here (the FS is read-only)
                                 # Cobalt пише тимчасові файли сюди
@@ -233,3 +267,8 @@ services:
 volumes:
   botdata:
   tgapi-data:
+  # Shared by the bot (writes) and Cobalt (reads): the same login session in
+  # two formats. Kept off botdata so Cobalt sees nothing else.
+  # Спільний для бота (пише) і Cobalt (читає): та сама сесія у двох форматах.
+  # Тримається окремо від botdata, щоб Cobalt не бачив нічого зайвого.
+  cobaltcookies:

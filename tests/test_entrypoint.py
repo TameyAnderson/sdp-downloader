@@ -129,8 +129,49 @@ class TestDockerfileMatches(unittest.TestCase):
         self.assertIn("chmod +x entrypoint.sh", dockerfile)
 
     def test_local_bin_is_in_path(self):
-        """The upgraded yt-dlp lands in ~/.local — without PATH nobody sees it."""
-        self.assertIn("/root/.local/bin", read("Dockerfile"))
+        """The upgraded yt-dlp lands in ~/.local — without PATH nobody sees it.
+
+        And it must be the home of the user the bot actually runs as: the
+        upgrade happens after privileges are dropped, so a PATH still pointing
+        at /root would quietly leave the image version in place.
+        """
+        dockerfile = read("Dockerfile")
+        self.assertIn("/home/sdp/.local/bin", dockerfile)
+        self.assertNotIn("/root/.local/bin", dockerfile,
+                         "PATH points at root's home, but the bot is not root")
+
+
+class TestNotRoot(unittest.TestCase):
+    """The process that runs yt-dlp on strangers' links must not be root.
+
+    The container still starts as root on purpose — a /data volume created by
+    an older image belongs to root, and somebody has to hand it over — but it
+    must not stay that way.
+    """
+
+    def test_an_unprivileged_user_exists(self):
+        dockerfile = read("Dockerfile")
+        self.assertIn("useradd", dockerfile)
+        self.assertIn("gosu", dockerfile, "no way to drop privileges")
+
+    def test_the_entrypoint_drops_privileges(self):
+        script = read("entrypoint.sh")
+        self.assertIn('if [ "$(id -u)" = "0" ]', script)
+        self.assertIn("exec gosu sdp", script)
+
+    def test_data_is_handed_over_before_dropping(self):
+        """Otherwise an existing volume stays root-owned and the bot cannot write."""
+        script = read("entrypoint.sh")
+        self.assertLess(script.index("chown -R sdp:sdp /data"),
+                        script.index("exec gosu sdp"),
+                        "privileges are dropped before /data is handed over")
+
+    def test_the_upgrade_runs_after_the_drop(self):
+        """pip --user must install into the bot's home, not root's."""
+        script = read("entrypoint.sh")
+        self.assertLess(script.index("exec gosu sdp"),
+                        script.index("AUTO_UPGRADE_YTDLP"),
+                        "yt-dlp would be installed into a home nobody reads")
 
 
 if __name__ == "__main__":

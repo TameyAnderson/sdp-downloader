@@ -116,7 +116,10 @@ then **Deploy the stack**.
   Spotify and Deezer read the public track title and look for a match on
   YouTube (no DRM circumvention).
 - **Soundtrack as a separate MP3** for short videos — for when the music under
-  the clip is the point.
+  the clip is the point. The track is cut from the file that was just
+  downloaded, so it costs no second request.
+- **Photo posts and photo carousels**: a post with pictures instead of a video
+  is sent as an album rather than reported as a failure.
 - Quality ladder 4K → 2K → 1080 → 720, plus manual quality and bitrate selection.
 
 ### The panel (Mini App)
@@ -166,6 +169,19 @@ then **Deploy the stack**.
 - `/health` + Docker healthcheck + `autoheal` — a stuck bot restarts itself.
 - `yt-dlp` channel `stable | nightly | master` — broken extractors get fixed
   before the official release.
+- **Failures are named**: private post, age restriction, geo block, deleted
+  post or a changed site — not one message for everything.
+- **A deadline per job**, so a link that fails slowly stops holding a slot, and
+  a **pause on an engine** that has failed several times in a row on the same
+  platform.
+- The **same link posted twice at once** is downloaded once.
+- **Startup self-check**: ffmpeg, Cobalt, the PO-token provider, the real file
+  limit — and whether group privacy is on, which is the usual reason a bot
+  looks dead in a group.
+- **Graceful stop**: on `docker stop` running downloads are given time to
+  finish; leftovers from a previous run are cleared at startup.
+- **Restore from a backup**: send the `.db` back to the bot in private. The
+  file is checked before it replaces anything, and the old one is kept.
 
 ## Configuration
 
@@ -295,6 +311,28 @@ Contribution guidelines are in [CONTRIBUTING.md](CONTRIBUTING.md).
 settings, LITE mode, bilingual completeness, deployment configs and secret
 scanning. CI runs the same on every push — details in
 [tests/README.md](tests/README.md).
+
+## Security
+
+The bot runs a downloader against links handed to it by other people, so a few
+things are locked down by default. None of them need configuring.
+
+- **Not root.** The container starts as root only long enough to hand `/data`
+  over to an unprivileged user, then drops to it. An existing volume is taken
+  care of automatically, so an upgrade needs nothing from you.
+- **Links into your own network are refused.** Otherwise a link dropped in a
+  group could aim the downloader at your router's panel, a neighbouring
+  container, or the cloud metadata service that hands out credentials to
+  anything asking from inside. Your own Cobalt and Bot API stay reachable. Set
+  `ALLOW_PRIVATE_HOSTS=1` if you deliberately download from your own network.
+- **Secrets can live in files.** Anything in the environment is readable by
+  everyone who can run `docker inspect`, and Portainer shows it in plain text.
+  Point `BOT_TOKEN_FILE` or `GITHUB_TOKEN_FILE` at a file and the file wins.
+- **The panel API is rate limited** per caller, so a signed `initData` cannot be
+  replayed in a loop for the length of its lifetime.
+- **Cookies are treated as credentials.** The file is stored with tight
+  permissions and the message you sent it in is deleted from the chat. Use a
+  throwaway account: a cookies file is a login without the password or 2FA.
 
 ## Limitations
 

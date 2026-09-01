@@ -24,6 +24,12 @@ CI runs exactly this on every push.
 | `test_entrypoint.py` | the yt-dlp self-upgrade actually works: documented install method per channel, no dead placeholder wheel links, failures are loud |
 | `test_release.py` | the publish workflow builds for amd64+arm64, smoke-tests the image before releasing, needs no manual secrets; both stacks pull the published image |
 | `test_deploy.py` | compose parses without duplicate keys, every variable is read by the code, `.dockerignore` keeps the needed files, no secrets in the repository |
+| `test_security.py` | links pointing into the private network are refused, secrets can live in files, the panel API is rate limited |
+| `test_cache.py` | quality is part of the cache key, and a cache is dropped when the Telegram API it came from changes |
+| `test_concurrency.py` | limits, per-chat pacing, background tasks that must not be garbage collected, disk space |
+| `test_engines.py` | failures are named, a job has a deadline, a failing engine is paused, one download per link, cookies for Cobalt |
+| `test_db.py` | numbered migrations, WAL, a shared connection, and restoring from a backup without losing the live database |
+| `test_ops.py` | Cobalt response shapes, the startup self-check, orphan cleanup, graceful stop, job ids in the log |
 
 ## Writing new ones
 

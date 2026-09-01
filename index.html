@@ -257,7 +257,7 @@
         <div class="hint" data-i18n="engine_hint">«Авто»: є cookies — першим іде yt-dlp (краща якість), немає — Cobalt.</div>
       </div>
       <div class="card">
-        <label data-i18n="ck_title">Cookies Instagram</label>
+        <label data-i18n="ck_title">Cookies</label>
         <div id="ck-box" class="ckbox"></div>
         <div class="tun" style="margin-top:10px">
           <label data-i18n="ck_warn_label">Попередити за N днів до кінця<span class="sub" data-i18n="ck_warn_sub">0 — не нагадувати</span></label>
@@ -270,6 +270,7 @@
         <label data-i18n="backup_label">Резервна копія</label>
         <div class="hint" data-i18n="backup_hint">Копія бази зі статистикою, налаштуваннями та білими списками. Бот надішле файл тобі в приват.</div>
         <button class="go" id="bk-send" style="margin-top:10px" data-i18n="backup_btn">Зробити копію</button>
+        <div class="hint" style="margin-top:8px" data-i18n="restore_hint">Щоб відновити — надішли файл .db боту в приват. Він перевірить його, поставить на місце, а стару базу збереже поруч.</div>
         <div class="hint" id="bk-status" style="text-align:center"></div>
       </div>
       <div class="card">
@@ -401,7 +402,8 @@
         backup_hint:"Копія бази зі статистикою, налаштуваннями та білими списками. Бот надішле файл тобі в приват.",
         backup_btn:"Зробити копію", backup_wait:"Готую копію…",
         backup_sent:"Готово — файл у чаті з ботом ({kb} КБ)", backup_none:"Бази ще немає — нічого копіювати.",
-        ck_title:"Cookies Instagram",
+        restore_hint:"Щоб відновити — надішли файл .db боту в приват. Він перевірить його, поставить на місце, а стару базу збереже поруч.",
+        ck_title:"Cookies",
         ck_warn_label:"Попередити за N днів до кінця", ck_warn_sub:"0 — не нагадувати",
         ck_send_hint:"Щоб оновити — надішли файл cookies.txt боту в приват.",
         ck_on:"Активні", ck_soon:"Скоро спливуть", ck_dead:"Протерміновані", ck_off:"Не підключені",
@@ -488,7 +490,8 @@
         backup_hint:"A copy of the database: stats, settings and access lists. The bot sends the file to you in private.",
         backup_btn:"Make a backup", backup_wait:"Preparing…",
         backup_sent:"Done — the file is in your chat with the bot ({kb} KB)", backup_none:"No database yet — nothing to back up.",
-        ck_title:"Instagram cookies",
+        restore_hint:"To restore, send a .db file to the bot in private. It checks the file, puts it in place and keeps the old database next to it.",
+        ck_title:"Cookies",
         ck_warn_label:"Warn N days before expiry", ck_warn_sub:"0 — never remind",
         ck_send_hint:"To refresh — send a cookies.txt file to the bot in private.",
         ck_on:"Active", ck_soon:"Expiring soon", ck_dead:"Expired", ck_off:"Not connected",

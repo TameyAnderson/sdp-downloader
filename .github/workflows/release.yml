@@ -13,6 +13,20 @@ on:
   push:
     branches: [main]
     tags: ["v*"]
+  # Weekly canary. It rebuilds :edge and, more to the point, runs the smoke
+  # test against a fresh base image and a fresh Deno — so a break shows up here
+  # on a Monday instead of on somebody's server after a restart.
+  # Note what this does NOT do: requirements.txt pins yt-dlp, so the rebuild
+  # installs the same version. Freshness comes from the container's own upgrade
+  # at startup (AUTO_UPGRADE_YTDLP + YTDLP_CHANNEL), not from this schedule.
+  # Щотижнева канарка. Перезбирає :edge і, головне, ганяє smoke-тест на свіжому
+  # базовому образі та свіжому Deno — щоб поломка спливла тут у понеділок, а не
+  # на чиємусь сервері після перезапуску.
+  # Чого це НЕ робить: requirements.txt фіксує версію yt-dlp, тож перезбірка
+  # ставить ту саму. Свіжість дає самооновлення контейнера при старті
+  # (AUTO_UPGRADE_YTDLP + YTDLP_CHANNEL), а не цей розклад.
+  schedule:
+    - cron: "0 5 * * 1"
   workflow_dispatch:
 
 env:

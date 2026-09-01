@@ -111,9 +111,17 @@ downloaded file
 
 **Stored:**
 
-- SQLite: events (statistics), settings, allow lists;
-- cookies — on a volume, permissions 600;
-- the `file_id` cache.
+- SQLite: events (statistics), settings, allow lists. WAL is on, so the panel
+  reads while an event is being written; the schema is versioned in
+  `PRAGMA user_version` and carried forward by numbered migrations. One
+  connection per worker thread, reused.
+- cookies — on a volume, permissions 600. Written twice: the Netscape file
+  `yt-dlp` wants, and Cobalt's own `cookies.json`, so the fallback engine has
+  the same session.
+- the `file_id` cache. The key includes the quality, because 480p and 1080p of
+  the same link are different files. It is stamped with the Telegram API it
+  came from and dropped if that changes — a `file_id` only works on the server
+  that issued it. Writes are deferred off the event loop.
 
 **Every N hours** (interval editable in the panel, 2 by default) it checks:
 
@@ -121,6 +129,18 @@ downloaded file
 - a new commit in the watched repository (upstream or your fork) — compared
   against the **running** commit, so it never asks for a pointless redeploy;
 - cookie expiry — warns N days in advance.
+
+**Per job:** quality, trim, title and the failure reason live in contextvars,
+and every entry point starts its own task — that is the whole isolation
+mechanism. A job has a deadline (short-form and long YouTube get different
+ones) so a slow failure cannot hold a slot, and an engine that fails several
+times in a row on one platform is paused for a while. Two people posting the
+same link at once produce one download.
+
+**On start and stop:** a self-check reports ffmpeg, Cobalt, the PO-token
+provider, the real file limit and whether group privacy is on; leftover work
+directories from a previous run are removed. `SIGTERM` stops polling, lets
+running jobs finish within a deadline, and flushes the cache.
 
 In **LITE** nothing from the "Stored" list exists: no database, no cache, no
 writable cookies. Temporary files live in `/tmp` in RAM.

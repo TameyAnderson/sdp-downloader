@@ -1,6 +1,21 @@
 #!/bin/sh
 set -e
 
+# Started as root only to hand /data over to the unprivileged user — a volume
+# created by an older version of this image still belongs to root, so this also
+# migrates existing deployments. Everything after the re-exec, the yt-dlp
+# upgrade included, runs as "sdp".
+# Стартуємо під root лише щоб передати /data непривілейованому користувачу —
+# том, створений старішою версією образу, досі належить root, тож заразом
+# мігруємо наявні розгортання. Усе після перезапуску, зокрема оновлення
+# yt-dlp, виконується під "sdp".
+if [ "$(id -u)" = "0" ]; then
+    mkdir -p /data
+    chown -R sdp:sdp /data 2>/dev/null || \
+        echo "[entrypoint] !! could not take ownership of /data — check volume permissions"
+    exec gosu sdp "$0" "$@"
+fi
+
 # With AUTO_UPGRADE_YTDLP=1 a fresh yt-dlp is pulled on every container start
 # (installed into ~/.local, which takes priority in PATH). That way yt-dlp can
 # be updated by simply restarting the container, without rebuilding the image.
