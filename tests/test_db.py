@@ -119,10 +119,34 @@ class TestConnections(unittest.TestCase):
         self.assertIsNot(self.bot.db_conn(), first)
 
     def test_queries_go_through_the_shared_connection(self):
-        src = read("bot.py")
-        opens = src.count("sqlite3.connect(STATS_DB")
-        self.assertLessEqual(opens, 2,
-                             "a query still opens its own connection (%d found)" % opens)
+        """No query may open its own connection.
+
+        Counting connections would be simpler and wrong: backup and restore
+        open their own on purpose, because they must not run through the
+        pooled one. What matters is which functions do it, not how many times.
+        """
+        import ast
+
+        allowed = {
+            "db_conn",        # the pool itself
+            "send_backup",    # SQLite's online backup needs its own handles
+            "restore_backup", # same, plus it replaces the file underneath
+        }
+        tree = ast.parse(read("bot.py"))
+        offenders = set()
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            body = "\n".join(
+                ast.unparse(child) for child in ast.walk(node)
+                if isinstance(child, ast.Call))
+            if "sqlite3.connect" in body:
+                offenders.add(node.name)
+        # nested helpers are reported under their own name, so allow those too
+        offenders -= allowed | {"_dump"}
+        self.assertFalse(offenders,
+                         "these open a connection instead of using db_conn(): %s"
+                         % sorted(offenders))
 
 
 class TestRestore(unittest.TestCase):
