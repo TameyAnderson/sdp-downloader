@@ -177,14 +177,14 @@ class TestJobIdInLogs(unittest.TestCase):
         self.log.propagate = False
 
     def test_lines_outside_a_job_are_unchanged(self):
-        BOT._JOB.set(None)
+        self.bot._JOB.set(None)
         self.log.info("hello")
         self.assertEqual(self.buf.getvalue().strip(), "INFO|hello")
 
     def test_lines_inside_a_job_carry_its_id(self):
-        BOT._JOB.set({"id": "abcdef1234567890"})
+        self.bot._JOB.set({"id": "abcdef1234567890"})
         self.log.info("hello")
-        BOT._JOB.set(None)
+        self.bot._JOB.set(None)
         self.assertEqual(self.buf.getvalue().strip(), "INFO|[abcdef12] hello")
 
     def test_the_format_string_uses_it(self):

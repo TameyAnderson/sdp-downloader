@@ -4115,7 +4115,24 @@ def restore_backup(raw):
         # Зберегти те, що заміщуємо: відновлення не з того файлу поправне,
         # відновлення поверх єдиної копії — ні.
         if Path(STATS_DB).exists():
-            shutil.copy2(STATS_DB, STATS_DB + ".replaced")
+            # A plain file copy is wrong here. With WAL on, recent writes live
+            # in the -wal file next to the database, and this function deletes
+            # that file a moment later — so a copied stats.db could arrive
+            # missing everything written since the last checkpoint, which is
+            # exactly the data somebody restoring would want back.
+            # Проста копія файлу тут неправильна. З увімкненим WAL свіжі записи
+            # лежать у файлі -wal поруч із базою, а ця функція видаляє його за
+            # мить — тож скопійований stats.db міг лишитись без усього, що
+            # записане після останньої контрольної точки, тобто саме без тих
+            # даних, які людина й хотіла б повернути.
+            keep_src = sqlite3.connect(STATS_DB, timeout=10)
+            keep_dst = sqlite3.connect(STATS_DB + ".replaced")
+            try:
+                with keep_dst:
+                    keep_src.backup(keep_dst)
+            finally:
+                keep_dst.close()
+                keep_src.close()
         for suffix in ("-wal", "-shm"):
             Path(STATS_DB + suffix).unlink(missing_ok=True)
         os.replace(str(tmp), STATS_DB)

@@ -181,7 +181,7 @@ class TestPhotoPosts(unittest.TestCase):
         src = read("bot.py")
         block = src[src.index("        if COBALT_FALLBACK_URL"):]
         block = block[:block.index('return "fail", source')]
-        self.assertLess(block.index("ytdlp_photos(dl_url)"), block.index('t("cant_video")'),
+        self.assertLess(block.index("ytdlp_photos(dl_url)"), block.index('"cant_video"'),
                         "the bot gives up before it looks for photos")
 
 
