@@ -155,6 +155,50 @@ class TestCobaltResponses(unittest.TestCase):
         self.assertIn("Cobalt unsupported status=%s", src)
 
 
+class TestDiskFullStopsTheLadder(unittest.TestCase):
+    """Running out of room is not "this quality does not work".
+
+    Seen in production: a 4K video reported at 1.1 GB failed on a 1 GB tmpfs,
+    the ladder stepped down twice, and the user received 1080p at 200 MB with
+    no explanation — after the bot had announced 4K a moment earlier.
+    """
+
+    REAL_ERRORS = [
+        "ERROR: unable to write data: [Errno 28] No space left on device",
+        "ERROR: unable to write data: No space left on device",
+        "ERROR: Disk quota exceeded",
+    ]
+
+    def test_the_real_message_is_recognised(self):
+        for text in self.REAL_ERRORS:
+            with self.subTest(text=text[:40]):
+                self.assertEqual(BOT.classify_failure(text), "no_space")
+
+    def test_it_is_not_confused_with_an_ordinary_failure(self):
+        self.assertNotEqual(BOT.classify_failure("ERROR: Video unavailable"), "no_space")
+
+    def test_the_ladder_stops_instead_of_stepping_down(self):
+        src = read("bot.py")
+        block = src[src.index("async def try_ytdlp_send"):]
+        block = block[:block.index("async def try_ytdlp_audio")]
+        self.assertIn('_FAIL_REASON.get() == "no_space"', block)
+        stop = block.index('_FAIL_REASON.get() == "no_space"')
+        step = block.index("break  # download failed at this height")
+        self.assertLess(stop, step, "it steps down before noticing the disk is full")
+
+    def test_the_user_is_told(self):
+        for lang in ("uk", "en"):
+            with self.subTest(lang=lang):
+                self.assertIn("no_space", BOT.T[lang])
+
+    def test_a_later_generic_error_does_not_hide_it(self):
+        """The merge fails next with "Conversion failed", which says nothing."""
+        BOT._FAIL_REASON.set(None)
+        BOT.note_failure("unable to write data: [Errno 28] No space left on device")
+        BOT.note_failure("ERROR: Postprocessing: Conversion failed!")
+        self.assertEqual(BOT._FAIL_REASON.get(), "no_space")
+
+
 class TestJobDeadline(unittest.TestCase):
     """A job holds a slot of the per-user gate for its whole life."""
 

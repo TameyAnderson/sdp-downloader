@@ -59,6 +59,16 @@ services:
       # the file to the bot in private and it stores it here itself.
       # Лежить на volume botdata -> переживає передеплой. Файл можна просто
       # надіслати боту в приват — він сам збереже сюди.
+      # Downloads are assembled here. NOT in /tmp: that is a 1 GB tmpfs, and
+      # merging needs room for the video, the audio and the result at once —
+      # about twice the final size. A 4K video would fail there, the quality
+      # ladder would step down, and you would silently receive 1080p.
+      # On the data volume the only ceiling is the disk itself.
+      # Тут збираються завантаження. НЕ в /tmp: це tmpfs на 1 ГБ, а для склейки
+      # потрібне місце одночасно під відео, аудіо й результат — приблизно вдвічі
+      # більше за кінцевий розмір. 4K там не влізе, драбина якості спуститься,
+      # і ти мовчки отримаєш 1080p. На томі даних стеля — лише сам диск.
+      WORK_DIR: ${WORK_DIR:-/data/work}
       COOKIES_FILE: ${COOKIES_FILE:-/data/cookies.txt}
       # The same session, written out again in Cobalt's format so the fallback
       # is logged in too. Empty value = do not write it.

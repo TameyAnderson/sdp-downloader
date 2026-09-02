@@ -268,6 +268,22 @@ class TestWorkDirCapacity(unittest.TestCase):
         self.assertIn("MIN_FREE_SPACE", block)
         self.assertIn('t("no_space")', block)
 
+    def test_the_full_stack_does_not_assemble_downloads_in_ram(self):
+        """/tmp is a 1 GB tmpfs; a 4K download needs about twice its own size.
+
+        Leaving it there is how a video announced as 4K arrived as 1080p.
+        """
+        import yaml
+        env = yaml.safe_load(read("docker-compose.yml"))["services"]["video-bot"]["environment"]
+        self.assertIn("WORK_DIR", env, "downloads still land in the tmpfs")
+        self.assertIn("/data/", env["WORK_DIR"], "the work dir is not on the volume")
+
+    def test_lite_keeps_the_default(self):
+        """LITE has no volumes at all — /tmp is the only place it has."""
+        import yaml
+        env = yaml.safe_load(read("docker-compose.lite.yml"))["services"]["video-bot"]["environment"]
+        self.assertNotIn("WORK_DIR", env)
+
     def test_the_mismatch_is_reported_at_startup(self):
         src = read("bot.py")
         self.assertIn("check_workdir_capacity()", src)

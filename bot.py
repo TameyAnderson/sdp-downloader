@@ -1947,6 +1947,13 @@ _FAIL_PATTERNS = (
     ("err_extractor", ("unable to extract", "unexpected response",
                        "please report this issue", "no video formats found",
                        "unsupported url")),
+    # Not a property of the link at all — the machine ran out of room. It has
+    # to be told apart from the rest, because every lower rung of the quality
+    # ladder will hit the same wall.
+    # Взагалі не властивість посилання — на машині скінчилось місце. Це треба
+    # відрізняти від решти, бо кожна нижча сходинка драбини впреться в ту саму
+    # стіну.
+    ("no_space", ("no space left on device", "errno 28", "disk quota exceeded")),
 )
 
 # The reason for the last failure inside this job, so the final message can
@@ -2704,6 +2711,19 @@ async def try_ytdlp_send(bot, message, dl_url, ladder, prefer_merge, allow_silen
             for fmt in (fn(height) for fn in fmt_order):
                 f, error = await ytdlp_download(dl_url, height, fmt)
                 if error:
+                    if _FAIL_REASON.get() == "no_space":
+                        # Stepping down here is worse than failing. The disk is
+                        # full, so every lower rung fails the same way — except
+                        # eventually one is small enough to fit, and the user
+                        # silently receives 480p of the 4K video they asked
+                        # for, with the bot having reported 4K a moment before.
+                        # Спускатись тут гірше, ніж впасти. Диск повний, тож
+                        # кожна нижча сходинка падає так само — доки якась не
+                        # виявиться достатньо малою, і користувач мовчки
+                        # отримує 480p замість 4K, про які бот щойно звітував.
+                        logger.error("Out of space in %s — stopping instead of "
+                                     "quietly stepping down the ladder", WORK_DIR)
+                        return "fail", None
                     break  # download failed at this height -> try next (lower) one
                 if f.stat().st_size > MAX_FILE_SIZE:
                     cleanup(f)
