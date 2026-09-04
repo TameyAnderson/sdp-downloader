@@ -209,7 +209,7 @@ class TestBookkeepingIsPruned(unittest.IsolatedAsyncioTestCase):
 
     def test_the_sweep_is_actually_scheduled(self):
         src = read("bot.py")
-        self.assertIn("spawn(housekeeping_loop())", src,
+        self.assertRegex(src, r"spawn\(\s*housekeeping_loop\(",
                       "the sweep exists but nobody runs it")
 
 

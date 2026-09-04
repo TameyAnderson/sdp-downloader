@@ -3,9 +3,7 @@
 import re
 import unittest
 
-from helper import load_bot, read
-
-BOT = load_bot()
+from helper import BOT, read
 
 
 def app_dicts():

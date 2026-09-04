@@ -10,9 +10,7 @@ twice when two people posted it at once.
 import asyncio
 import unittest
 
-from helper import load_bot, read
-
-BOT = load_bot()
+from helper import BOT, load_bot, read
 
 # Real messages, copied from failures seen in production.
 FAILURES = [
@@ -127,7 +125,7 @@ class TestCobaltSession(unittest.TestCase):
         src = read("bot.py")
         block = src[src.index("def store_cookies"):]
         block = block[:block.index("\n\n\n")]
-        self.assertIn("write_cobalt_cookies(text)", block,
+        self.assertRegex(block, r"write_cobalt_cookies\(",
                       "the fallback never sees the session")
 
     def test_writing_is_opt_in(self):
@@ -278,8 +276,8 @@ class TestCircuitBreaker(unittest.TestCase):
     def test_the_loop_honours_it(self):
         src = read("bot.py")
         self.assertIn("if not engine_available(plat, eng):", src)
-        self.assertIn("engine_result(plat, eng, True)", src)
-        self.assertIn("engine_result(plat, eng, False)", src)
+        self.assertRegex(src, r"engine_result\(\s*plat,\s*eng,\s*True")
+        self.assertRegex(src, r"engine_result\(\s*plat,\s*eng,\s*False")
 
 
 class TestOneDownloadPerLink(unittest.IsolatedAsyncioTestCase):

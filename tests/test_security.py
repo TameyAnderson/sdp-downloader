@@ -10,9 +10,7 @@ import os
 import tempfile
 import unittest
 
-from helper import load_bot, read
-
-BOT = load_bot()
+from helper import BOT, load_bot, read
 
 # Addresses that must never be fetched on somebody else's behalf.
 INSIDE = [
@@ -90,11 +88,25 @@ class TestLinkFiltering(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(await bot.url_is_safe("http://cobalt-api:9010/tunnel?id=1"))
 
     def test_only_the_engines_get_the_exemption(self):
-        src = read("bot.py")
-        granted = src.count("internal_ok=True")
-        self.assertEqual(granted, 1, "the exemption spread beyond download_file")
-        block = src[src.index("async def download_file"):]
-        self.assertIn("internal_ok=True", block[:block.index("try:")])
+        """Only download_file may waive the check for our own services.
+
+        Named by function instead of counted: another correct caller would
+        break a count while breaking no rule.
+        """
+        import ast
+        tree = ast.parse(read("bot.py"))
+        waivers = set()
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            for call in (c for c in ast.walk(node) if isinstance(c, ast.Call)):
+                if getattr(call.func, "id", "") != "url_is_safe":
+                    continue
+                if any(k.arg == "internal_ok" and getattr(k.value, "value", False)
+                       for k in call.keywords):
+                    waivers.add(node.name)
+        self.assertEqual(waivers, {"download_file"},
+                         "the exemption spread beyond download_file: %s" % sorted(waivers))
 
     async def test_the_escape_hatch_works(self):
         bot = load_bot(ALLOW_PRIVATE_HOSTS=1)
@@ -110,11 +122,16 @@ class TestItIsWiredIn(unittest.TestCase):
                       "a link goes to the engines unchecked")
 
     def test_links_returned_by_other_services_are_checked_too(self):
-        """Cobalt and tikwm answer with URLs; those come from outside as well."""
+        """Cobalt and tikwm answer with URLs; those come from outside as well.
+
+        Matched loosely on purpose: the call gained an argument once already
+        and broke this test while the rule it guards was never violated.
+        """
+        import re
         src = read("bot.py")
         block = src[src.index("async def download_file"):]
         block = block[:block.index("try:")]
-        self.assertIn("url_is_safe(url)", block)
+        self.assertRegex(block, r"url_is_safe\(\s*url\b")
 
 
 class TestSecretsCanLiveInFiles(unittest.TestCase):

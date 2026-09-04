@@ -44,6 +44,26 @@ def load_bot(**env):
         os.environ.update(saved)
 
 
+class _LazyBot:
+    """Imports bot.py on first attribute access, not when the test file loads.
+
+    A large share of these tests only read source files and need none of the
+    bot's dependencies. Importing eagerly at module level made those tests
+    unrunnable anywhere aiogram is missing — including every quick check
+    before a push, which is exactly when a broken assertion should surface.
+    """
+
+    _mod = None
+
+    def __getattr__(self, name):
+        if _LazyBot._mod is None:
+            _LazyBot._mod = load_bot()
+        return getattr(_LazyBot._mod, name)
+
+
+BOT = _LazyBot()
+
+
 def read(name):
     return (ROOT / name).read_text(encoding="utf-8")
 

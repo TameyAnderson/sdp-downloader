@@ -13,9 +13,7 @@ looks like "something went wrong" with no visible cause.
 import re
 import unittest
 
-from helper import load_bot, read
-
-BOT = load_bot()
+from helper import BOT, load_bot, read
 
 # Titles that really occur and would have broken the markup
 NASTY_TITLES = [
@@ -115,7 +113,7 @@ class TestSoundtrackReusesTheDownload(unittest.TestCase):
     def test_nothing_is_left_on_disk(self):
         src = read("bot.py")
         block = src[src.index("async def try_ytdlp_audio"):]
-        self.assertIn("cleanup(local_src)", block, "the kept file is never removed")
+        self.assertRegex(block, r"cleanup\(\s*local_src")
         # the early return in _maybe_soundtrack must clear it too
         soundtrack = src[src.index("async def _maybe_soundtrack"):]
         soundtrack = soundtrack[:soundtrack.index("return")]

@@ -15,9 +15,7 @@ age-restricted posts.
 """
 import unittest
 
-from helper import load_bot, read
-
-BOT = load_bot()
+from helper import BOT, read
 
 TAB = "\t"
 
@@ -118,10 +116,17 @@ class TestItIsActuallyWiredIn(unittest.TestCase):
     """A function nobody calls is dead code: the file would be stored dirty."""
 
     def test_both_upload_paths_use_it(self):
-        """The definition plus two intake paths: a file and pasted text."""
+        """Both intake paths — a file and pasted text — must sanitise.
+
+        Checked by naming the paths rather than counting the calls: a count
+        breaks the moment a third, perfectly correct one appears.
+        """
         src = read("bot.py")
-        self.assertEqual(src.count("strip_volatile_cookies("), 3,
-                         "sanitising is not wired into both cookie intake paths")
+        for handler in ("async def on_cookies_document", "async def on_cookies_text"):
+            block = src[src.index(handler):]
+            block = block[:block.index("store_cookies(")]
+            with self.subTest(handler=handler):
+                self.assertIn("strip_volatile_cookies(", block)
 
     def test_nothing_is_stored_unfiltered(self):
         """store_cookies must receive text that is already sanitised."""
