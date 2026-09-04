@@ -552,6 +552,21 @@
 
     const SRCMAP = { youtube_video:"YouTube", youtube_shorts:"YouTube Shorts", tiktok_video:"TikTok",
       instagram:"Instagram", facebook:"Facebook" };
+    // Everything below is written into innerHTML, and a good half of it comes
+    // from outside: a chat title chosen by whoever created the group, a video
+    // title from someone else's site, a cookie domain. Without this a group
+    // named with a <script> tag would run that script in the admin's panel,
+    // with the admin's session and full access to the API.
+    // Усе нижче пишеться в innerHTML, і добра половина приходить ззовні: назва
+    // чату, яку вибрав той, хто створив групу, заголовок відео з чужого сайту,
+    // домен із cookies. Без цього група, названа тегом <script>, виконала б
+    // цей скрипт у панелі адміна, з його сесією й повним доступом до API.
+    function esc(v) {
+      return String(v == null ? "" : v)
+        .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+    }
+
     function lbl(s) {
       if (SRCMAP[s]) return SRCMAP[s];
       if (s === "tiktok_carousel") return tr("lbl_carousel");
@@ -679,8 +694,8 @@
       const bits = [];
       if (i.duration) bits.push(fmtDur(i.duration));
       if (i.size) bits.push(fmtSize(i.size));
-      if (i.uploader) bits.push(i.uploader);
-      renderPreview(`<div class="prev"><div class="t">${(i.title||"—")}</div>`
+      if (i.uploader) bits.push(esc(i.uploader));
+      renderPreview(`<div class="prev"><div class="t">${esc(i.title||"—")}</div>`
         + `<div class="muted">${bits.join(" · ")}</div></div>`);
     }
     urlBox.addEventListener("input", () => {
@@ -775,15 +790,15 @@
         const type = typeOf(e.source), ok = okS(e.status);
         const size = e.size ? fmtSize(e.size) + " · " : "";
         return `<div class="dl">
-          <div class="thumb"${e.thumb_id ? ` data-thumb="${e.thumb_id}"` : ""}>${ICON[type]}</div>
+          <div class="thumb"${e.thumb_id ? ` data-thumb="${esc(e.thumb_id)}"` : ""}>${ICON[type]}</div>
           <div class="dl-info">
             <div class="dl-type">${type}</div>
-            <div class="dl-name">${lbl(e.source)}</div>
-            <div class="dl-sub">${size}${e.chat_title||"—"} · ${e.via} · ${ago(e.ts)}</div>
+            <div class="dl-name">${esc(lbl(e.source))}</div>
+            <div class="dl-sub">${size}${esc(e.chat_title||"—")} · ${esc(e.via)} · ${ago(e.ts)}</div>
           </div>
           <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px">
             <div class="st ${ok?"ok":"err"}">${ok?tr("done"):tr("failed")}</div>
-            ${e.url ? `<button class="redo" onclick="redo('${e.url.replace(/'/g, "")}')">${tr("redo")}</button>` : ""}
+            ${e.url ? `<button class="redo" data-redo="${esc(e.url)}">${tr("redo")}</button>` : ""}
           </div>
         </div>`;
       }).join("");
@@ -796,7 +811,7 @@
       if (!rows.length) { box.innerHTML = `<div class="empty">${tr("no_data")}</div>`; return; }
       const max = Math.max(...rows.map(r => r.c));
       box.innerHTML = rows.map(r => `<div style="margin:8px 0">
-        <div class="row" style="padding:2px 0"><span>${r.name?r.name:lbl(r.source)}${r.chat_type?' <span class="muted">('+r.chat_type+')</span>':''}</span><span class="muted">${r.c}</span></div>
+        <div class="row" style="padding:2px 0"><span>${esc(r.name ? r.name : lbl(r.source))}${r.chat_type?' <span class="muted">('+esc(r.chat_type)+')</span>':''}</span><span class="muted">${r.c}</span></div>
         <div class="bar-bg"><div class="bar-fill" style="width:${Math.round(r.c/max*100)}%"></div></div></div>`).join("");
     }
     async function loadStats() {
@@ -844,8 +859,8 @@
         ? tr("ck_none")
         : (info.state === "expired" ? tr("ck_dead") : tr("ck_days").replace("{d}", info.days));
       const bits = [];
-      if (info.sites && info.sites.length) bits.push(info.sites.join(", "));
-      if (info.keys && info.keys.length) bits.push(tr("ck_keys") + ": " + info.keys.join(", "));
+      if (info.sites && info.sites.length) bits.push(esc(info.sites.join(", ")));
+      if (info.keys && info.keys.length) bits.push(tr("ck_keys") + ": " + esc(info.keys.join(", ")));
       // Absolute date, not just "N days ago": you cannot tell from a relative
       // string how long a file has actually been sitting there.
       // Абсолютна дата, а не саме лише «N днів тому»: за відносним рядком не
@@ -860,7 +875,7 @@
       // це видимим, замість того щоб виглядати багом.
       if (info.expires) bits.push(tr("ck_until") + " " + stamp(info.expires)
                                   + (info.expires_key ? ", " + tr("ck_by") + " "
-                                     + info.expires_key : ""));
+                                     + esc(info.expires_key) : ""));
       box.innerHTML = `<div class="ckhead"><span class="dot" style="background:${color}"></span>`
         + `<span>${label}</span><span class="muted" style="margin-left:auto">${left}</span></div>`
         + `<div class="ckmeta">${bits.join(" · ")}</div>`;
@@ -979,6 +994,21 @@
       loadSettings();
     });
     async function removeAccess(ident) { await apiPost("/api/access", { action:"remove", ident }); loadSettings(); }
+
+    // The two buttons that carry data from outside used to be built with the
+    // value pasted into an onclick attribute, which is the same escaping
+    // problem one layer deeper. They now hand the value over as a data
+    // attribute and one listener reads it back.
+    // Дві кнопки, що несуть зовнішні дані, раніше збирались зі значенням,
+    // вклеєним в атрибут onclick, — та сама проблема екранування, лише на шар
+    // глибше. Тепер значення передається атрибутом data, а один обробник його
+    // звідти читає.
+    document.addEventListener("click", ev => {
+      const again = ev.target.closest("[data-redo]");
+      if (again) { redo(again.dataset.redo); return; }
+      const gone = ev.target.closest("[data-del]");
+      if (gone) { removeAccess(gone.dataset.del); }
+    });
     window.removeAccess = removeAccess;
     async function loadSettings() {
       const s = await apiGet("/api/settings");
@@ -1017,10 +1047,10 @@
       const a = await apiGet("/api/access");
       const box = document.getElementById("acc-list");
       if (!a.ok || !a.access.length) { box.innerHTML = `<div class="empty">${tr("empty_list")}</div>`; return; }
-      box.innerHTML = a.access.map(r => { const id = r.ident.replace(/'/g,""); return `<div class="row" style="border-top:1px solid var(--line)">
-        <div><div style="font-weight:600">${r.label || tr("chat_w")}</div><div class="muted">${r.ident}</div></div>
-        <button class="sm del" onclick="removeAccess('${id}')">✕</button>
-        </div>`; }).join("");
+      box.innerHTML = a.access.map(r => `<div class="row" style="border-top:1px solid var(--line)">
+        <div><div style="font-weight:600">${esc(r.label || tr("chat_w"))}</div><div class="muted">${esc(r.ident)}</div></div>
+        <button class="sm del" data-del="${esc(r.ident)}">✕</button>
+        </div>`).join("");
     }
 
     // ---- init ----

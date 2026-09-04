@@ -435,7 +435,7 @@ def _own_service_hosts():
     return hosts
 
 
-async def url_is_safe(url):
+async def url_is_safe(url, internal_ok=False):
     """Refuse a link that points back inside our own network.
 
     The All-in service matches any URL whatsoever, so a link dropped in a group
@@ -472,8 +472,14 @@ async def url_is_safe(url):
     host = (parts.hostname or "").lower()
     if not host:
         return False
-    if (host, parts.port) in _own_service_hosts():
-        return True                      # our own Cobalt / Bot API / PO provider
+    # Only a link WE produced may point at our own services. A link typed by
+    # a user got the same exemption, so anyone could reach the Cobalt or Bot
+    # API port from outside by simply naming it.
+    # Лише посилання, яке зробили МИ, може вести на наші ж сервіси. Посилання
+    # від користувача мало той самий виняток, тож будь-хто міг дотягнутись до
+    # порту Cobalt чи Bot API ззовні, просто назвавши його.
+    if internal_ok and (host, parts.port) in _own_service_hosts():
+        return True
     try:
         infos = await asyncio.to_thread(socket.getaddrinfo, host, parts.port or None,
                                         0, socket.SOCK_STREAM)
@@ -1419,7 +1425,9 @@ def db_init():
         logger.info("Stats DB ready: %s (schema v%d)", STATS_DB,
                     con.execute("PRAGMA user_version").fetchone()[0])
     except Exception:  # noqa: BLE001
-        logger.exception("db_init failed")
+        global _db_healthy
+        _db_healthy = False
+        logger.exception("db_init failed — access is now admin-only")
 
 
 def _db_record_sync(row):
@@ -1508,6 +1516,12 @@ def db_events_sync(limit):
 # Access control & live settings
 # ----------------------------------------------------------------------------
 
+# False once the database could not be read. Access then falls back to
+# admin-only instead of "no restrictions found" — see resolve_access().
+# Стає False, коли базу не вдалось прочитати. Доступ тоді падає до «лише
+# адмін», а не до «обмежень не знайдено» — див. resolve_access().
+_db_healthy = True
+
 _settings = {}
 _access = {}  # ("chat", chat_id) -> "full"  — the whitelist, no tiers
 
@@ -1523,7 +1537,9 @@ def settings_load_sync():
         _access = {(r[0], r[1]): r[2] for r in con.execute("SELECT kind,ident,level FROM access")}
         rebuild_url_pattern()
     except Exception:  # noqa: BLE001
-        logger.exception("settings_load failed")
+        global _db_healthy
+        _db_healthy = False
+        logger.exception("settings_load failed — access is now admin-only")
 
 
 def setting(key, default=None):
@@ -1662,6 +1678,14 @@ def resolve_access(user_id, username, chat_id, is_group=False):
         return "lite"
     if ADMIN_ID and user_id == ADMIN_ID:
         return "admin"
+    # An unreadable database must not read as "no restrictions configured".
+    # The settings load leaves them empty, whitelist_on() then answers False,
+    # and a corrupt file would quietly turn a restricted bot into an open one.
+    # Нечитабельна база не має означати «обмежень не налаштовано». Завантаження
+    # налаштувань лишає їх порожніми, whitelist_on() відповідає False — і
+    # зіпсований файл тихо перетворював обмеженого бота на відкритого.
+    if not _db_healthy:
+        return "none"
     if not whitelist_on():
         return "extended"
     if is_group:
@@ -2345,7 +2369,7 @@ async def download_file(url, path):
     # get the same treatment as a link typed by a stranger.
     # Ці посилання повертають Cobalt і tikwm, тобто зовнішні сервіси, — тож
     # ставлення до них таке саме, як до лінка від незнайомця.
-    if not await url_is_safe(url):
+    if not await url_is_safe(url, internal_ok=True):
         return False
     try:
         async with aiohttp.ClientSession() as session:
@@ -2353,8 +2377,30 @@ async def download_file(url, path):
                 if resp.status != 200:
                     return False
                 expected = int(resp.headers.get("Content-Length") or 0)
+                # A server that announces something too large is refused before
+                # a single byte is written.
+                # Сервер, який одразу оголошує завеликий розмір, отримує
+                # відмову ще до першого записаного байта.
+                if expected and expected > MAX_FILE_SIZE:
+                    logger.warning("Refusing %d MB from %s: over the limit",
+                                   expected // 1024 // 1024, url)
+                    return False
+                # And a server that lies about it, or says nothing, is cut off
+                # mid-stream. Checking the size only after the download meant a
+                # single answer could fill the disk before anyone looked.
+                # А сервер, який про це збрехав чи промовчав, обривається під
+                # час читання. Перевірка розміру лише після завантаження
+                # означала, що одна відповідь могла забити диск раніше, ніж
+                # хтось на неї гляне.
+                written = 0
                 with open(path, "wb") as f:
                     async for chunk in resp.content.iter_chunked(65536):
+                        written += len(chunk)
+                        if written > MAX_FILE_SIZE:
+                            logger.warning("Cut off %s: passed the %d MB limit "
+                                           "mid-stream", url,
+                                           MAX_FILE_SIZE // 1024 // 1024)
+                            return False
                         f.write(chunk)
         size = path.stat().st_size if path.exists() else 0
         if size <= 0:
@@ -3466,6 +3512,13 @@ class ChatTarget:
 
 async def start_web_server(bot):
     async def health(_request):
+        # A bot that cannot read its own database is not healthy, and saying
+        # "ok" here is what let a broken one keep running unnoticed.
+        # Бот, який не може прочитати власну базу, не здоровий, а відповідь
+        # "ok" саме й дозволяла зламаному працювати непоміченим.
+        if not _db_healthy:
+            return web.json_response({"status": "degraded", "db": "unreadable"},
+                                     status=503)
         return web.json_response({"status": "ok"})
 
     async def serve_index(_request):
@@ -3614,11 +3667,23 @@ async def start_web_server(bot):
         user = verify_webapp_init_data(request.headers.get("X-Telegram-Init-Data", ""), BOT_TOKEN)
         if not user or not user.get("id"):
             return web.json_response({"ok": False, "error": "auth_failed"}, status=403)
+        # The panel is an admin tool; this endpoint starts a yt-dlp process on
+        # a URL of the caller's choosing, so it gets the same gate as the rest.
+        # Панель — інструмент адміна; цей ендпоінт запускає процес yt-dlp за
+        # довільним посиланням, тож ворота в нього ті самі, що й у решти.
+        if not _is_admin_user(user):
+            return web.json_response({"ok": False, "error": "forbidden"}, status=403)
         raw = request.query.get("url", "")
         urls = extract_urls(raw)
         if not urls:
             return web.json_response({"ok": False, "error": "no_link"}, status=400)
         url = urls[0]
+        # With All-in on, "any URL" includes the machine's own network. The
+        # download path checks this; the preview used to skip it entirely.
+        # З увімкненим All-in «будь-яке посилання» включає власну мережу
+        # машини. Шлях завантаження це перевіряє, а прев'ю — не перевіряло.
+        if not await url_is_safe(url):
+            return web.json_response({"ok": False, "error": "refused"}, status=400)
         plat = _platform(url)
         if SERVICES.get(plat, {}).get("resolve"):
             q = await resolve_track_title(url)
@@ -3632,9 +3697,17 @@ async def start_web_server(bot):
         _with_auth(args, url)
         args.append(url)
         try:
-            proc = await asyncio.create_subprocess_exec(
-                *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
-            out, _ = await asyncio.wait_for(proc.communicate(), timeout=45)
+            # Through the same gate as a download. Without it, a preview per
+            # keystroke would start an unbounded number of yt-dlp processes,
+            # each of them a network client of its own.
+            # Через ті самі ворота, що й завантаження. Без них прев'ю на кожне
+            # натискання клавіші запускало б необмежену кількість процесів
+            # yt-dlp, і кожен з них — окремий мережевий клієнт.
+            async with download_semaphore:
+                proc = await asyncio.create_subprocess_exec(
+                    *args, stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.DEVNULL)
+                out, _ = await asyncio.wait_for(proc.communicate(), timeout=45)
             data = json.loads(out or b"{}")
         except Exception:  # noqa: BLE001
             return web.json_response({"ok": False, "error": "no_info"}, status=404)
@@ -3725,6 +3798,29 @@ async def start_web_server(bot):
         rows = await asyncio.to_thread(access_list_sync)
         return web.json_response({"ok": True, "access": rows})
 
+    async def _init_data_from_body(request):
+        """The panel sends initData in the body for downloads, not the header.
+
+        Reading only the header put every real download into the shared "anon"
+        bucket — so a hundred unauthenticated requests could stop the admin's
+        own downloads, and the per-user limit protected nobody. aiohttp caches
+        the body, so the handler still reads it afterwards.
+        Панель надсилає initData для завантажень у тілі запиту, а не в заголовку.
+        Читання лише заголовка відправляло кожне справжнє завантаження у спільний
+        кошик "anon": сотня неавтентифікованих запитів зупиняла завантаження
+        самому адміну, а ліміт на користувача не захищав нікого. aiohttp кешує
+        тіло, тож обробник прочитає його далі як звичайно.
+        """
+        if request.method != "POST":
+            return ""
+        if not request.content_type.startswith("application/json"):
+            return ""
+        try:
+            body = await request.json()
+        except Exception:  # noqa: BLE001
+            return ""
+        return body.get("initData", "") if isinstance(body, dict) else ""
+
     @web.middleware
     async def rate_limit(request, handler):
         """Cap how often one caller may hit the panel API.
@@ -3745,7 +3841,8 @@ async def start_web_server(bot):
         if not request.path.startswith("/api/"):
             return await handler(request)
         user = verify_webapp_init_data(
-            request.headers.get("X-Telegram-Init-Data", ""), BOT_TOKEN)
+            request.headers.get("X-Telegram-Init-Data", "")
+            or await _init_data_from_body(request), BOT_TOKEN)
         key = str(user.get("id")) if user and user.get("id") else "anon"
         now = time.monotonic()
         hits = [t for t in _api_hits.get(key, ()) if now - t < API_RATE_WINDOW]

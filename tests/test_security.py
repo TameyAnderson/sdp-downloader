@@ -69,15 +69,32 @@ class TestLinkFiltering(unittest.IsolatedAsyncioTestCase):
             with self.subTest(url=url):
                 self.assertFalse(await BOT.url_is_safe(url))
 
-    async def test_our_own_cobalt_is_still_reachable(self):
+    async def test_a_link_we_produced_may_reach_our_own_cobalt(self):
         """Self-hosted Cobalt answers with links to itself, on a private address.
 
-        Blocking those outright would leave the whole Cobalt engine dead — the
-        check has to know the difference between our own services and the rest
-        of the network.
+        Blocking those outright would leave the whole Cobalt engine dead, so
+        the exemption exists — but only for links the bot itself received from
+        a service it configured.
         """
         bot = load_bot(COBALT_API_URL="http://cobalt-api:9010")
-        self.assertTrue(await bot.url_is_safe("http://cobalt-api:9010/tunnel?id=1"))
+        self.assertTrue(await bot.url_is_safe("http://cobalt-api:9010/tunnel?id=1",
+                                              internal_ok=True))
+
+    async def test_a_user_may_not_name_our_own_services(self):
+        """The exemption used to apply to anything, including a pasted link.
+
+        That let anyone reach the Cobalt or Bot API port from the outside by
+        simply typing its hostname into the chat.
+        """
+        bot = load_bot(COBALT_API_URL="http://cobalt-api:9010")
+        self.assertFalse(await bot.url_is_safe("http://cobalt-api:9010/tunnel?id=1"))
+
+    def test_only_the_engines_get_the_exemption(self):
+        src = read("bot.py")
+        granted = src.count("internal_ok=True")
+        self.assertEqual(granted, 1, "the exemption spread beyond download_file")
+        block = src[src.index("async def download_file"):]
+        self.assertIn("internal_ok=True", block[:block.index("try:")])
 
     async def test_the_escape_hatch_works(self):
         bot = load_bot(ALLOW_PRIVATE_HOSTS=1)
