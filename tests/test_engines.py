@@ -21,6 +21,12 @@ FAILURES = [
     ("ERROR: [youtube] Video unavailable. This video has been removed by the uploader",
      "err_gone"),
     ("ERROR: The uploader has not made this video available in your country", "err_geo"),
+    # The story extractor words it its own way, and neither phrasing used to
+    # match anything — a story the account cannot see read as a plain failure.
+    ("ERROR: [instagram:story] 3983627697225787466: You need to log in to "
+     "access this content.", "err_private"),
+    ("ERROR: [instagram:story] 3983693358862086144: This content is "
+     "unreachable.", "err_private"),
     ("ERROR: [Instagram] Dcju: No video formats found!", "err_extractor"),
     ("ERROR: [TikTok] 76: Unexpected response from webpage request", "err_extractor"),
     ("ERROR: unable to download webpage: HTTP Error 500", "err_download"),

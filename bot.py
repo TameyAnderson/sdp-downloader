@@ -34,9 +34,11 @@ import tempfile
 import threading
 import time
 import uuid
+from http.cookiejar import LoadError, MozillaCookieJar
 from importlib.metadata import PackageNotFoundError, version as pkg_version
 from pathlib import Path
 from urllib.parse import parse_qsl, urlsplit
+from urllib.request import Request
 
 import aiohttp
 from aiohttp import web
@@ -624,6 +626,13 @@ T = {
         "cant_link": "⚠️ не вдалося обробити посилання.",
         "no_space": "⚠️ На сервері закінчилось місце. Спробуй трохи пізніше.",
         "err_private": "🔒 Пост закритий — потрібен доступ до акаунта.",
+        "story_session": ("🔒 Для Instagram Stories потрібна чинна Instagram-сесія. "
+                          "Адміністратору: відкрий цю сторіс у залогіненому браузері "
+                          "та онови cookies.txt бота з цього акаунта."),
+        "story_access": ("🔒 Instagram не надав доступ до цієї сторіс. Перевір, чи вона "
+                         "ще доступна акаунту, чиї cookies використовує бот. "
+                         "Якщо у браузері вона відкривається — онови cookies.txt; "
+                         "якщо помилка лишиться, перевір сесію та логи на сервері."),
         "err_age": "🔞 Віковий доступ. Потрібні cookies залогіненого акаунта.",
         "err_geo": "🌍 Недоступно з країни, де стоїть сервер.",
         "err_gone": "🗑 Пост видалено або він більше не існує.",
@@ -696,6 +705,13 @@ T = {
         "cant_link": "⚠️ couldn't process the link.",
         "no_space": "⚠️ The server has run out of space. Try again a bit later.",
         "err_private": "🔒 The post is private — it needs account access.",
+        "story_session": ("🔒 Instagram Stories need a valid Instagram session. "
+                          "Admin: open this story in a logged-in browser and update "
+                          "the bot's cookies.txt from that account."),
+        "story_access": ("🔒 Instagram did not grant access to this story. Check that it "
+                         "is still available to the account whose cookies the bot uses. "
+                         "If it opens in the browser, update cookies.txt; if the error "
+                         "persists, check the session and logs on the server."),
         "err_age": "🔞 Age-restricted. Cookies from a logged-in account are needed.",
         "err_geo": "🌍 Not available from the country the server sits in.",
         "err_gone": "🗑 The post was deleted or no longer exists.",
@@ -1743,6 +1759,43 @@ def _platform(url):
     return None
 
 
+def _is_instagram_story(url):
+    try:
+        parts = urlsplit(url)
+        return (parts.scheme in ("http", "https")
+                and parts.hostname in ("instagram.com", "www.instagram.com", "m.instagram.com")
+                and parts.path.startswith("/stories/"))
+    except ValueError:
+        return False
+
+
+def instagram_session_ready():
+    """Check local session presence/expiry, not whether Instagram accepts it.
+
+    Use cookie scope rules and support Netscape #HttpOnly_ session cookies.
+    A TikTok sessionid or an Instagram csrftoken alone cannot log in to Stories.
+    """
+    if not COOKIES_FILE:
+        return False
+    try:
+        jar = MozillaCookieJar(COOKIES_FILE)
+        jar.load(ignore_discard=True, ignore_expires=True)
+        now = time.time()
+        for cookie in list(jar):
+            # Netscape exporters (and yt-dlp) also use 0 for session cookies.
+            if cookie.expires == 0:
+                cookie.expires = None
+            elif cookie.is_expired(now):
+                jar.clear(cookie.domain, cookie.path, cookie.name)
+        request = Request("https://www.instagram.com/stories/")
+        jar.add_cookie_header(request)
+        header = request.get_header("Cookie", "")
+        return any(part.strip().startswith("sessionid=") and part.strip()[10:]
+                   for part in header.split(";"))
+    except (OSError, LoadError, ValueError):
+        return False
+
+
 def _is_long_youtube(url):
     """Full YouTube video (watch) — heavy, allowed only in private chats."""
     return "youtube.com/watch" in url.lower()
@@ -1954,7 +2007,15 @@ def _build_ytdlp_audio_args(url, out_template):
 _FAIL_PATTERNS = (
     ("err_age", ("age-restricted", "confirm your age", "18 years old",
                  "not be comfortable for some audiences")),
+    # "log in to access" and "unreachable" are how the Instagram story
+    # extractor phrases it, and neither matched anything here — so a story the
+    # account cannot see was reported as a plain download failure.
+    # "log in to access" і "unreachable" — саме так формулює екстрактор сторіс
+    # в Instagram, і жодне з них сюди не підпадало: сторіс, якої акаунт не
+    # бачить, повідомлялась як звичайна невдача завантаження.
     ("err_private", ("private", "login required", "log in for access",
+                     "log in to access", "you need to log in",
+                     "content is unreachable",
                      "sign in to confirm", "requires authentication",
                      "this account is private")),
     # "available in your country" covers both the plain "not available in your
@@ -2757,6 +2818,8 @@ async def try_ytdlp_send(bot, message, dl_url, ladder, prefer_merge, allow_silen
             for fmt in (fn(height) for fn in fmt_order):
                 f, error = await ytdlp_download(dl_url, height, fmt)
                 if error:
+                    if _is_instagram_story(dl_url) and _FAIL_REASON.get() == "err_private":
+                        return "fail", None  # Lower resolution cannot grant access.
                     if _FAIL_REASON.get() == "no_space":
                         # Stepping down here is worse than failing. The disk is
                         # full, so every lower rung fails the same way — except
@@ -2986,6 +3049,11 @@ async def process_url(bot, message, url, is_private, want_audio, via="chat", tri
 
 
 async def _do_process(bot, message, url, is_private, want_audio, plat, source):
+    story = _is_instagram_story(url)
+    if story and not await asyncio.to_thread(instagram_session_ready):
+        _FAIL_REASON.set("err_private")
+        await message.reply(t("story_session"))
+        return "fail", source
     if SERVICES.get(plat, {}).get("audio"):
         want_audio = True
     if SERVICES.get(plat, {}).get("resolve"):
@@ -3011,7 +3079,8 @@ async def _do_process(bot, message, url, is_private, want_audio, plat, source):
             if status == "sent" and sent and sent.audio:
                 cache_set(url, True, "audio", sent.audio.file_id)
             elif status == "fail":
-                await message.reply(t("cant_audio"))
+                await message.reply(t("story_access") if story and _FAIL_REASON.get() == "err_private"
+                                    else t("cant_audio"))
             return status, source
 
     # --- Video mode ---
@@ -3019,7 +3088,7 @@ async def _do_process(bot, message, url, is_private, want_audio, plat, source):
         bot=bot, chat_id=message.chat.id, action=ChatAction.UPLOAD_VIDEO
     ):
         svc = SERVICES.get(plat, {})
-        if want_title(message) and _TITLE.get() is None:
+        if not story and want_title(message) and _TITLE.get() is None:
             _TITLE.set(await fetch_title(url))
         long_video = _needs_extended(url)
         ladder = long_ladder() if long_video else quality_ladder()
@@ -3069,7 +3138,19 @@ async def _do_process(bot, message, url, is_private, want_audio, plat, source):
             except Exception:  # noqa: BLE001
                 logger.info("soundtrack extraction failed: %s", dl_url)
 
-        # Pass 1 — strict: every engine must return a complete video (with audio,
+        if story:
+            # Cobalt rejects /stories/ outright. Keep story access failures out
+            # of the shared Instagram circuit breaker: Reels may still work.
+            st = await _video_with_cache(bot, message, dl_url, dl_url, ladder,
+                                         prefer_merge, allow_silent=True)
+            if st in ("sent", "sent_silent"):
+                await _maybe_soundtrack()
+            elif st == "fail":
+                await message.reply(t("story_access") if _FAIL_REASON.get() == "err_private"
+                                    else t(_FAIL_REASON.get() or "cant_video"))
+            return st, source
+
+        # Pass 1 - strict: every engine must return a complete video (with audio,
         # not an image). Pass 2 — lenient: accept a silent best-effort file.
         engines = engine_order(plat, svc)
         _SOFT_REJECT.set(False)
@@ -3945,6 +4026,8 @@ def parse_cookies_txt(text):
     rows, bad = [], 0
     for line in text.splitlines():
         line = line.rstrip("\n")
+        if line.startswith("#HttpOnly_"):
+            line = line[len("#HttpOnly_"):]
         if not line.strip() or line.lstrip().startswith("#"):
             continue
         parts = line.split("\t")

@@ -221,6 +221,13 @@ reminds you in advance. In Lite the file is only mounted from the host.
 > 2FA. Use a **separate** account, never your main one, and never commit that
 > file — `.gitignore` already covers every common name.
 
+Stories require an Instagram `sessionid` cookie and must be visible to that
+account. If a story fails, first open it in the logged-in browser used for the
+export, then refresh the bot's cookies. A future expiry date does not prove the
+session is still accepted by Instagram. `#HttpOnly_` cookies are supported.
+Stories use yt-dlp directly; an access denial is not retried at lower qualities
+or through Cobalt.
+
 ### Large files (up to 2 GB)
 
 A regular Telegram bot cannot send files larger than 50 MB. A local Bot API
