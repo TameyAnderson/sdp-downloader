@@ -626,6 +626,10 @@ T = {
         "cant_link": "⚠️ не вдалося обробити посилання.",
         "no_space": "⚠️ На сервері закінчилось місце. Спробуй трохи пізніше.",
         "err_private": "🔒 Пост закритий — потрібен доступ до акаунта.",
+        "tg_file_mode": ("Увімкни TELEGRAM_LOCAL=1 у сервісі telegram-bot-api та "
+                         "перествори його контейнер: сервер повернув відносний шлях замість локального файла."),
+        "tg_file_mount": ("Локальний файл Telegram недоступний. Перевір спільний том "
+                          "tgapi-data у контейнерах video-bot і telegram-bot-api та права читання."),
         "story_session": ("🔒 Для Instagram Stories потрібна чинна Instagram-сесія. "
                           "Адміністратору: відкрий цю сторіс у залогіненому браузері "
                           "та онови cookies.txt бота з цього акаунта."),
@@ -705,6 +709,10 @@ T = {
         "cant_link": "⚠️ couldn't process the link.",
         "no_space": "⚠️ The server has run out of space. Try again a bit later.",
         "err_private": "🔒 The post is private — it needs account access.",
+        "tg_file_mode": ("Set TELEGRAM_LOCAL=1 on the telegram-bot-api service and recreate "
+                         "its container: the server returned a relative path instead of a local file."),
+        "tg_file_mount": ("The local Telegram file is unavailable. Check the shared tgapi-data "
+                          "volume in video-bot and telegram-bot-api and its read permissions."),
         "story_session": ("🔒 Instagram Stories need a valid Instagram session. "
                           "Admin: open this story in a logged-in browser and update "
                           "the bot's cookies.txt from that account."),
@@ -4209,6 +4217,19 @@ def _find_local_file(file_path):
     return None
 
 
+class TelegramFileFetchError(RuntimeError):
+    """Safe, actionable error that contains no URL, token or file contents."""
+
+
+def telegram_file_error(exc):
+    if isinstance(exc, TelegramFileFetchError):
+        return str(exc)
+    # aiohttp exception strings contain /file/bot<TOKEN>/ URLs. Do not print
+    # them, even truncated, in chat replies or exception tracebacks.
+    status = getattr(exc, "status", None)
+    return f"Telegram HTTP {status}" if isinstance(status, int) else type(exc).__name__
+
+
 async def fetch_telegram_file(bot, file_obj):
     """Return the bytes of a Telegram file.
 
@@ -4216,18 +4237,18 @@ async def fetch_telegram_file(bot, file_obj):
     does not work there, so read it straight from disk.
     """
     if TELEGRAM_API_URL:
-        try:
-            info = await bot.get_file(file_obj.file_id)
-            fp = getattr(info, "file_path", None) or ""
-            p = _find_local_file(fp)
-            if p is not None:
-                return p.read_bytes()
-            mounted = [b for b in TGAPI_ROOTS if Path(b).is_dir()]
-            logger.warning(
-                "Local Bot API file not found. file_path=%r, mounted roots=%s. "
-                "Is tgapi-data mounted into the bot container?", fp, mounted or "NONE")
-        except Exception:  # noqa: BLE001
-            logger.exception("get_file failed")
+        info = await bot.get_file(file_obj.file_id)
+        fp = getattr(info, "file_path", None) or ""
+        p = await asyncio.to_thread(_find_local_file, fp)
+        if p is not None:
+            try:
+                return await asyncio.to_thread(p.read_bytes)
+            except OSError:
+                raise TelegramFileFetchError(t("tg_file_mount")) from None
+        # The stock local API does not serve /file/bot<TOKEN>/ URLs.
+        # Retrying via bot.download only adds a 404 and leaks the token.
+        key = "tg_file_mount" if Path(fp).is_absolute() or not fp else "tg_file_mode"
+        raise TelegramFileFetchError(t(key))
 
     buf = io.BytesIO()
     await bot.download(file_obj, destination=buf)
@@ -4445,7 +4466,7 @@ async def handle_restore(message, bot, doc):
     try:
         raw = await fetch_telegram_file(bot, doc)
     except Exception as exc:  # noqa: BLE001
-        await message.reply(t("ck_fetch_fail", err=str(exc)[:120]),
+        await message.reply(t("ck_fetch_fail", err=telegram_file_error(exc)),
                             disable_notification=True)
         return
     ok, reason = await asyncio.to_thread(restore_backup, raw)
@@ -4477,8 +4498,9 @@ async def on_cookies_document(message, bot):
         raw = await fetch_telegram_file(bot, doc)
         text, dropped = strip_volatile_cookies(raw.decode("utf-8", "ignore"))
     except Exception as exc:  # noqa: BLE001
-        logger.exception("cookies download failed")
-        await message.reply(t("ck_fetch_fail", err=str(exc)[:120]),
+        reason = telegram_file_error(exc)
+        logger.warning("cookies download failed: %s", reason)
+        await message.reply(t("ck_fetch_fail", err=reason),
                             disable_notification=True)
         return
     if not text.strip():

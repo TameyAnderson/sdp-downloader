@@ -240,6 +240,15 @@ the server runs next to the bot inside Docker and is never exposed outside.
 3. Do the one-time `logOut` for the bot, then set
    `TELEGRAM_API_URL=http://telegram-bot-api:8081` and `MAX_FILE_SIZE_MB=2000`.
 
+For incoming attachments (including cookies.txt), the `telegram-bot-api`
+service must have `TELEGRAM_LOCAL: "1"` and share `tgapi-data` with `video-bot`
+at `/var/lib/telegram-bot-api` (read-only in the bot). These settings are in the
+Full compose file. When upgrading an older stack, recreate **both** services
+with the updated configuration; restarting only the bot does not apply new
+server environment variables. Do not delete the volumes. A relative
+`documents/file_*.txt` path followed by HTTP 404 usually means local mode is
+missing; an unavailable absolute path points to the shared mount or permissions.
+
 The `logOut` call moves your bot from Telegram's cloud servers to your own.
 It is a one-way switch: to go back you would have to `logOut` from the local
 server first. Files are downloaded to a volume, so budget disk space for them.

@@ -70,6 +70,14 @@ class TestCompose(unittest.TestCase):
         self.assertEqual(services["telegram-bot-api"].get("profiles"), ["bigfiles"])
         self.assertEqual(services["cloudflared"].get("profiles"), ["miniapp"])
 
+    def test_local_telegram_downloads_use_the_shared_volume(self):
+        services = load("docker-compose.yml")["services"]
+        api = services["telegram-bot-api"]
+        self.assertEqual(api["environment"]["TELEGRAM_LOCAL"], "1")
+        root = api["environment"]["TELEGRAM_WORK_DIR"]
+        self.assertIn(f"tgapi-data:{root}", api["volumes"])
+        self.assertIn(f"tgapi-data:{root}:ro", services["video-bot"]["volumes"])
+
 
 class TestDockerfile(unittest.TestCase):
     def test_copied_files_are_not_excluded(self):
