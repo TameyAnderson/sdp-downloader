@@ -28,7 +28,11 @@ RUN chmod +x entrypoint.sh
 # що це робить, не має бути root. Контейнер усе одно СТАРТУЄ під root — треба
 # полагодити права на вже наявному томі /data — а далі entrypoint одразу
 # перезапускає себе під цим користувачем.
-RUN useradd --create-home --shell /bin/sh --uid 10001 sdp \
+# Match the UID used by aiogram/telegram-bot-api. Its files are private
+# (0600, directories 0750); a supplementary group cannot read owner-only files.
+# The shared Telegram volume remains read-only in this container. Do not
+# chmod it or change its ownership. /data is migrated by entrypoint.sh.
+RUN useradd --create-home --shell /bin/sh --uid 101 sdp \
     && mkdir -p /data \
     && chown -R sdp:sdp /data /app
 

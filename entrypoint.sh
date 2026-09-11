@@ -12,7 +12,13 @@ set -e
 if [ "$(id -u)" = "0" ]; then
     mkdir -p /data
     chown -R sdp:sdp /data 2>/dev/null || \
-        echo "[entrypoint] !! could not take ownership of /data — check volume permissions"
+        echo "[entrypoint] !! could not take ownership of /data - check volume permissions"
+    # This writable volume contains the bot's Cobalt cookie export. Migrate
+    # it too when the bot UID changes; never modify the read-only TG volume.
+    if [ -d /cookies ]; then
+        chown -R sdp:sdp /cookies 2>/dev/null || \
+            echo "[entrypoint] !! could not take ownership of /cookies - check volume permissions"
+    fi
     exec gosu sdp "$0" "$@"
 fi
 

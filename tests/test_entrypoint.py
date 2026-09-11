@@ -159,6 +159,22 @@ class TestNotRoot(unittest.TestCase):
         self.assertIn('if [ "$(id -u)" = "0" ]', script)
         self.assertIn("exec gosu sdp", script)
 
+    def test_bot_uid_matches_private_local_telegram_files(self):
+        dockerfile = read("Dockerfile")
+        self.assertRegex(dockerfile, r"useradd[^\n]*--uid\s+101\s+sdp")
+        self.assertNotRegex(dockerfile, r"(?m)^USER\s+root\s*$")
+
+    def test_startup_does_not_relax_telegram_volume_permissions(self):
+        script = read("entrypoint.sh")
+        self.assertNotRegex(script, r"(?m)^\s*(?:chown|chmod)[^\n]*/var/lib/telegram-bot-api")
+        self.assertNotRegex(script, r"(?m)^\s*chmod[^\n]*777")
+
+    def test_cobalt_cookie_export_is_migrated_before_dropping(self):
+        script = read("entrypoint.sh")
+        self.assertIn('if [ -d /cookies ]', script)
+        self.assertLess(script.index("chown -R sdp:sdp /cookies"),
+                        script.index("exec gosu sdp"))
+
     def test_data_is_handed_over_before_dropping(self):
         """Otherwise an existing volume stays root-owned and the bot cannot write."""
         script = read("entrypoint.sh")

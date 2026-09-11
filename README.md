@@ -245,7 +245,18 @@ service must have `TELEGRAM_LOCAL: "1"` and share `tgapi-data` with `video-bot`
 at `/var/lib/telegram-bot-api` (read-only in the bot). These settings are in the
 Full compose file. When upgrading an older stack, recreate **both** services
 with the updated configuration; restarting only the bot does not apply new
-server environment variables. Do not delete the volumes. A relative
+server environment variables. Do not delete the volumes.
+
+The bot image runs as UID **101**, matching the bundled Telegram API image.
+Telegram creates private files (0600) and directories (0750), so the previous
+bot UID 10001 could not read attachments even with the correct shared volume.
+To apply this fix, rebuild/pull the updated **bot image** and recreate
+`video-bot`; a restart of the old image is not enough. Its startup migrates
+`/data` and the optional `/cookies` export volume ownership automatically.
+Keep the Telegram mount read-only and do not
+apply `chmod 777`. Custom Telegram API images must use a matching file-owner UID.
+
+A relative
 `documents/file_*.txt` path followed by HTTP 404 usually means local mode is
 missing; an unavailable absolute path points to the shared mount or permissions.
 
