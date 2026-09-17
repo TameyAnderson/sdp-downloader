@@ -138,6 +138,7 @@ class TestRepoIsClean(unittest.TestCase):
 
     ALLOWED_ROOT = {
         "bot.py", "index.html", "requirements.txt", "Dockerfile", "entrypoint.sh",
+        "package.json", "package-lock.json",  # Material Web build and pinned dependencies
         "docker-compose.yml", "docker-compose.lite.yml",
         ".env.example", ".env.lite.example", ".gitignore", ".dockerignore",
         "LICENSE", "README.md", "README.uk.md",
@@ -167,6 +168,20 @@ class TestRepoIsClean(unittest.TestCase):
         """The image will not build without it — the file is mandatory."""
         self.assertIn("requirements.txt", self.tracked())
         self.assertIn("requirements.txt", read("Dockerfile"))
+
+    def test_frontend_manifests_are_tracked_and_consistent(self):
+        import json
+
+        tracked = self.tracked()
+        for filename in ("package.json", "package-lock.json"):
+            self.assertIn(filename, tracked)
+            self.assertIn(filename, read("Dockerfile"))
+        manifest = json.loads(read("package.json"))
+        lock = json.loads(read("package-lock.json"))
+        root_package = lock["packages"][""]
+        for key in ("name", "version", "dependencies", "devDependencies"):
+            self.assertEqual(manifest[key], root_package[key], key)
+        self.assertEqual(manifest["version"], lock["version"])
 
     def test_banner_is_where_readme_expects_it(self):
         self.assertIn('src="docs/banner.png"', read("README.md"))
