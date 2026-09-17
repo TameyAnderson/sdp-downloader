@@ -24,6 +24,11 @@ cookies.txt
 stats.db*
 cache.json
 
+# --- Frontend dependencies and generated bundle ---
+# --- Залежності інтерфейсу та згенерована збірка ---
+node_modules/
+static/material.js
+
 # --- Python ---
 __pycache__/
 *.py[cod]

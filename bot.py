@@ -34,6 +34,7 @@ import tempfile
 import threading
 import time
 import uuid
+from functools import lru_cache
 from http.cookiejar import LoadError, MozillaCookieJar
 from importlib.metadata import PackageNotFoundError, version as pkg_version
 from pathlib import Path
@@ -328,7 +329,7 @@ SERVICES = {
                  "engines": ("ytdlp", "cobalt"),
                  "pats": [r"[a-z0-9-]+\.bandcamp\.com/(?:track|album)/[^\s]*",
                           r"(?:www\.)?bandcamp\.com/[^\s]*"]},
-    # Keep LAST: matches anything yt-dlp might support. Enabled = "All-in".
+    # Keep LAST: only URLs recognised by a site-specific yt-dlp extractor.
     "allin": {"label": "All-in", "i18n": "svc_allin", "default": False, "tier": "extended",
               "merge": True, "engines": ("ytdlp",), "pats": [r"[^\s]+"]},
 }
@@ -1724,14 +1725,13 @@ def resolve_access(user_id, username, chat_id, is_group=False):
 
 
 def _build_url_pattern():
-    parts = []
-    for sid, svc in SERVICES.items():
-        if service_enabled(sid):
-            parts.extend(svc["pats"])
-    if not parts:
+    global _URL_SERVICES
+    _URL_SERVICES = frozenset(sid for sid in SERVICES if service_enabled(sid))
+    if not _URL_SERVICES:
         return re.compile(r"(?!x)x")
-    body = "|".join(parts)
-    return re.compile(r"(https?://(?:" + body + r"))", re.IGNORECASE)
+    # Capture whole URLs first. Searching service patterns within text would
+    # mistake example.org/?next=https://youtube.com/... for a YouTube link.
+    return re.compile(r"https?://[^\s<>\"']+", re.IGNORECASE)
 
 
 URL_PATTERN = _build_url_pattern()
@@ -1749,10 +1749,12 @@ def extract_urls(text):
     seen = set()
     result = []
     for url in URL_PATTERN.findall(text):
-        url = url.rstrip(").,!?»\"'")
+        url = url.rstrip(").,!?»\"']}")
         if url not in seen:
             seen.add(url)
-            result.append(url)
+            platform = _platform(url)
+            if platform in _URL_SERVICES:
+                result.append(url)
     return result
 
 
@@ -1760,10 +1762,40 @@ def _wants_audio(text):
     return bool(_AUDIO_RE.search(text or ""))
 
 
+@lru_cache(maxsize=1)
+def _site_extractors():
+    """Use the installed yt-dlp registry, not a separately maintained list.
+
+    Class suitability checks are local regex checks: no network or download.
+    Generic accepts everything; error-only extractors are not supported sites.
+    """
+    try:
+        from yt_dlp.extractor import gen_extractor_classes
+    except ImportError:
+        logger.warning("yt-dlp registry unavailable; All-in links will be ignored")
+        return ()
+    excluded = {"Generic", "UnsupportedURL", "CommonMistakes", "UnicodeBOM", "Blob"}
+    return tuple(ie for ie in gen_extractor_classes() if ie.ie_key() not in excluded)
+
+
+@lru_cache(maxsize=2048)
+def _supported_ytdlp_url(url):
+    return any(ie.suitable(url) for ie in _site_extractors())
+
+
 def _platform(url):
+    try:
+        parts = urlsplit(url)
+        if (parts.scheme not in ("http", "https") or not parts.hostname
+                or parts.username is not None or parts.password is not None):
+            return None
+    except ValueError:
+        return None
     for sid, svc in SERVICES.items():
-        if svc["_re"].search(url):
+        if sid != "allin" and svc["_re"].match(url):
             return sid
+    if "allin" in _URL_SERVICES and _supported_ytdlp_url(url):
+        return "allin"
     return None
 
 
@@ -3946,6 +3978,18 @@ async def start_web_server(bot):
     app.router.add_get("/health", health)
     if WEBAPP_ENABLED:
         app.router.add_get("/", serve_index)
+        # Exact public asset route, never expose the app directory or /data.
+        async def serve_material(_request):
+            asset = Path(INDEX_HTML_PATH).resolve().parent / "static" / "material.js"
+            if not asset.is_file():
+                return web.Response(status=404, text="Mini App bundle not built")
+            return web.FileResponse(asset, headers={
+                "Cache-Control": "no-cache",
+                "X-Content-Type-Options": "nosniff",
+                "Content-Type": "application/javascript",
+            })
+
+        app.router.add_get("/assets/material.js", serve_material)
         app.router.add_post("/api/download", api_download)
         app.router.add_get("/api/stats", api_stats)
         app.router.add_get("/api/events", api_events)

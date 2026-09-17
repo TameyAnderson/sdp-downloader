@@ -35,6 +35,18 @@ not versioned, so this stays in your clone only.
 
 ## What is covered
 
+### Mini App browser checks (optional)
+
+First run `npm ci` and `npm run build` in the project root: tests load the real
+Material Web bundle, not mock components. With Node.js, `playwright` and its Chromium browser installed, run
+`node tests/miniapp-ui.cjs` from the project root. Set `PLAYWRIGHT_CHANNEL=msedge`
+to use installed Edge instead. This separate suite intercepts all network requests:
+it does not contact Telegram or the real bot. It checks themes, responsive layout,
+keyboard controls, translations, download/settings requests, and error/empty states.
+Set `MINIAPP_SCREENSHOT_DIR` to save screenshots for visual review.
+
+### Python checks
+
 | File | About |
 |---|---|
 | `test_links.py` | link and platform detection, stripping `?igsh=`, All-in not shadowing other services |

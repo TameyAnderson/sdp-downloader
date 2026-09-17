@@ -34,7 +34,12 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
+
+      - name: Збірка Material Web
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
 
       - name: Синтаксис JS у Mini App
         run: |

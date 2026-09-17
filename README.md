@@ -109,7 +109,11 @@ then **Deploy the stack**.
   SoundCloud, Bandcamp, Twitter/X, Reddit, Pinterest, Tumblr, Snapchat, Bluesky,
   Vimeo, Dailymotion, Bilibili and more. Each one toggles separately.
 - **All-in** — a single switch that lets the bot take any of the 1500+ sites
-  supported by `yt-dlp`.
+  supported by `yt-dlp`. Links are matched locally against its installed
+  site-specific extractors; the generic "try any webpage" extractor is excluded.
+  Unrecognised links are silently ignored, including in mixed messages and
+  captions. Direct media URLs on unlisted hosts are ignored too. Service toggles
+  still apply; the supported-site registry follows yt-dlp updates after restart.
 - **Playlists** (video or mp3) and **trimming by timestamps** (`0:10-0:30`
   next to the link).
 - **Music**: YouTube Music, SoundCloud, Bandcamp — sent as tagged audio files.
@@ -123,6 +127,23 @@ then **Deploy the stack**.
 - Quality ladder 4K → 2K → 1080 → 720, plus manual quality and bitrate selection.
 
 ### The panel (Mini App)
+
+Official `@material/web` components with a mint/teal Material 3 palette, subtle
+gradient accents, switches, outlined fields, and light/dark themes. Auto follows
+Telegram (or the system theme in a browser). Theme choice is saved on the device.
+Compact screens use bottom navigation; wider windows use a side rail.
+The existing preview, download, history, statistics and admin controls remain available.
+
+Docker builds the frontend automatically in a separate Node.js stage; Node is not
+included in the running bot image. Components are served locally at `/assets/material.js`,
+not from a CDN. For a non-Docker installation, use Node.js 22+ and run `npm ci`
+then `npm run build` before starting the bot. Keep `static/` beside `index.html`
+(also when overriding `INDEX_HTML_PATH`). Rebuild after frontend dependency changes.
+After building, double-click `index.html` to preview it locally in a browser.
+Themes and navigation work without the bot; data and saving settings are not
+connected. Keep `index.html` and the adjacent `static/` directory together.
+Material Web is maintenance-only: this is an M3 web UI with Expressive-inspired
+accents, not the full Android Expressive component suite or Jetpack Compose.
 
 <table>
 <tr>

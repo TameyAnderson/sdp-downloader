@@ -66,7 +66,7 @@ class TestMiniApp(unittest.TestCase):
         html = read("index.html")
         uk, _ = app_dicts()
         used = set()
-        for pat in (r'data-i18n="(\w+)"', r'data-i18n-ph="(\w+)"',
+        for pat in (r'data-i18n="(\w+)"', r'data-i18n-ph="(\w+)"', r'data-i18n-aria="(\w+)"', r'data-i18n-supporting="(\w+)"',
                     r'\btr\("(\w+)"\)', r'\btrf\("(\w+)"'):
             used |= set(re.findall(pat, html))
         missing = used - uk
@@ -78,7 +78,7 @@ class TestMiniApp(unittest.TestCase):
         bad = []
         for tag in re.finditer(r"<(\w+)([^>]*)>([^<]{2,})", html):
             name, attrs, text = tag.groups()
-            if name == "option":
+            if name == "option" or (name == "span" and 'slot="headline"' in attrs and text.strip() in ("Українська", "English")):
                 continue                      # language names stay as they are
             if cyr.search(text) and "data-i18n" not in attrs:
                 bad.append(text.strip()[:50])

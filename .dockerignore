@@ -1,4 +1,6 @@
 .git
+node_modules
+static/material.js
 .gitignore
 .github
 *.md

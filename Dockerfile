@@ -1,3 +1,10 @@
+FROM node:22-slim AS miniapp
+WORKDIR /build
+COPY package.json package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY frontend ./frontend
+RUN npm run build
+
 FROM python:3.12-slim
 
 # Deno — the JS runtime yt-dlp needs to get past YouTube protection (nsig/challenge).
@@ -18,6 +25,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY bot.py entrypoint.sh index.html ./
+COPY --from=miniapp /build/static ./static
 RUN chmod +x entrypoint.sh
 
 # The bot runs yt-dlp against links handed to it by strangers, so the process

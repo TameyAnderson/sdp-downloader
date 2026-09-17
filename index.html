@@ -7,163 +7,300 @@
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700&family=Open+Sans:wght@400;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg: #0c0e13;
-      --bg2: #11141b;
-      --card: #191d26;
-      --card2: #222734;
-      --line: rgba(255,255,255,.07);
-      --text: #ffffff;
-      --muted: #82a0a8;
-      --navy: #001F3F;
-      --blue: #2f8fe0;
-      --green: #4caf50;
-      --orange: #FC8544;
+      color-scheme: light;
+      --md-sys-color-primary: #006b5f;
+      --md-sys-color-on-primary: #ffffff;
+      --md-sys-color-primary-container: #9df2df;
+      --md-sys-color-on-primary-container: #00201b;
+      --md-sys-color-secondary-container: #cde8df;
+      --md-sys-color-on-secondary-container: #304c44;
+      --md-sys-color-surface: #f5fbf7;
+      --md-sys-color-surface-container-low: #eaf5ef;
+      --md-sys-color-surface-container: #e4efe9;
+      --md-sys-color-surface-container-high: #dee9e3;
+      --md-sys-color-on-surface: #17201c;
+      --md-sys-color-on-surface-variant: #3f4944;
+      --md-sys-color-outline: #6f7973;
+      --md-sys-color-outline-variant: #bfc9c2;
+      --md-sys-color-error: #ba1a1a;
+      --md-sys-color-error-container: #ffdad6;
+      --md-sys-color-on-error-container: #410002;
+      --md-sys-color-secondary: #48655b;
+      --md-sys-color-on-secondary: #ffffff;
+      --md-sys-color-tertiary: #395f81;
+      --md-sys-color-on-tertiary: #ffffff;
+      --md-sys-color-tertiary-container: #cee5ff;
+      --md-sys-color-on-tertiary-container: #001d33;
+      --md-sys-color-surface-container-highest: #d8e3dd;
+      --md-sys-color-surface-container-lowest: #ffffff;
+      --md-sys-color-on-error: #ffffff;
+      --md-sys-color-inverse-surface: #2c3530;
+      --md-sys-color-inverse-on-surface: #edf5ee;
+      --md-sys-color-inverse-primary: #80d5c4;
+      --md-sys-shape-corner-small: 8px;
+      --md-sys-shape-corner-medium: 12px;
+      --md-sys-shape-corner-large: 16px;
+      --md-sys-shape-corner-large-increased: 20px;
+      --md-sys-shape-corner-extra-large: 28px;
+      --md-sys-shape-corner-full: 9999px;
+      --md-ref-typeface-plain: 'Roboto', system-ui, sans-serif;
+      --md-ref-typeface-brand: 'Roboto', system-ui, sans-serif;
+      --success: #246b48; --warning: #745700;
+      --bg: var(--md-sys-color-surface); --bg2: var(--md-sys-color-surface-container-low);
+      --card: var(--md-sys-color-surface-container-low); --card2: var(--md-sys-color-surface-container-high);
+      --line: var(--md-sys-color-outline-variant); --text: var(--md-sys-color-on-surface);
+      --muted: var(--md-sys-color-on-surface-variant); --blue: var(--md-sys-color-primary);
+      --green: var(--success); --orange: var(--md-sys-color-error);
+      --safe-bottom: max(env(safe-area-inset-bottom, 0px), var(--tg-safe-area-inset-bottom, 0px));
+    }
+    :root[data-theme="dark"] {
+      color-scheme: dark;
+      --md-sys-color-primary: #80d5c4;
+      --md-sys-color-on-primary: #00382f;
+      --md-sys-color-primary-container: #005046;
+      --md-sys-color-on-primary-container: #9df2df;
+      --md-sys-color-secondary-container: #304c44;
+      --md-sys-color-on-secondary-container: #cde8df;
+      --md-sys-color-surface: #0e1512;
+      --md-sys-color-surface-container-low: #17211c;
+      --md-sys-color-surface-container: #1b2520;
+      --md-sys-color-surface-container-high: #25302a;
+      --md-sys-color-on-surface: #dce5de;
+      --md-sys-color-on-surface-variant: #bfc9c2;
+      --md-sys-color-outline: #89958e;
+      --md-sys-color-outline-variant: #3f4944;
+      --md-sys-color-error: #ffb4ab;
+      --md-sys-color-error-container: #93000a;
+      --md-sys-color-on-error-container: #ffdad6;
+      --md-sys-color-secondary: #b1ccc2;
+      --md-sys-color-on-secondary: #19372e;
+      --md-sys-color-tertiary: #a2c9ef;
+      --md-sys-color-on-tertiary: #04324f;
+      --md-sys-color-tertiary-container: #204867;
+      --md-sys-color-on-tertiary-container: #cee5ff;
+      --md-sys-color-surface-container-highest: #303b35;
+      --md-sys-color-surface-container-lowest: #09100d;
+      --md-sys-color-on-error: #690005;
+      --md-sys-color-inverse-surface: #dce5de;
+      --md-sys-color-inverse-on-surface: #2c3530;
+      --md-sys-color-inverse-primary: #006b5f;
+      --success: #8dd6ad; --warning: #e7c46e;
     }
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-    body {
-      margin: 0; padding: 0 14px 84px; background: var(--bg); color: var(--text);
-      font-family: 'Open Sans', -apple-system, sans-serif;
-    }
-    h1, .sect, .nav span, button, .mode { font-family: 'Montserrat', sans-serif; }
-    .header { text-align: center; padding: 20px 2px 14px; }
-    .logo-txt { line-height: 1; }
-    .logo-txt .sdp { display: block; font-family: 'Montserrat'; font-weight: 700;
-      font-size: 34px; letter-spacing: 1px; color: #5c7ed0; }
-    .logo-txt .dl2 { display: block; font-family: 'Montserrat'; font-weight: 600;
-      font-size: 15px; letter-spacing: 1.5px; color: var(--muted); margin-top: 3px; }
+    body { margin: 0; background: var(--bg); color: var(--text); font: 400 16px/1.5 'Roboto', system-ui, sans-serif;
+      padding: calc(8px + max(env(safe-area-inset-top, 0px), var(--tg-safe-area-inset-top, 0px)) + var(--tg-content-safe-area-inset-top, 0px)) 16px calc(104px + var(--safe-bottom)); }
+    button, input, textarea, select { font: inherit; }
+    button { cursor: pointer; touch-action: manipulation; }
+    button:disabled { opacity: .45; cursor: wait; }
+    button, a, input, select, textarea { outline-offset: 4px; }
+    :focus-visible { outline: 3px solid var(--blue); }
+    button { transition: background-color .18s, color .18s; }
+    button:hover:not(:disabled) { filter: brightness(.96); }
+    button:active:not(:disabled) { filter: brightness(.9); }
+    .header, main { max-width: 880px; margin-inline: auto; }
+    .header { min-height: 72px; display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+    .logo-txt { display: flex; align-items: center; gap: 12px; }
+    .sdp { display: grid; place-items: center; width: 52px; height: 52px; border-radius: var(--md-sys-shape-corner-large-increased);
+      background: linear-gradient(135deg, var(--md-sys-color-primary-container), var(--md-sys-color-tertiary-container)); color: var(--md-sys-color-on-primary-container); font-weight: 700; font-size: 20px; letter-spacing: -.8px; }
+    .dl2 { font-size: 18px; font-weight: 500; letter-spacing: -.3px; }
+    .theme-control { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .theme-control label { margin: 0; font-size: 12px; }
     .page { display: none; } .page.active { display: block; }
-    .card { background: var(--card); border-radius: 15px; padding: 14px; margin-bottom: 12px;
-      border: 1px solid var(--line); }
-    label { font-size: 13px; color: var(--muted); display: block; margin-bottom: 9px; }
-    textarea, input, select {
-      width: 100%; border: none; border-radius: 11px; padding: 12px; font-size: 15px;
-      background: var(--bg2); color: var(--text); font-family: 'Open Sans', sans-serif;
-    }
-    textarea { min-height: 76px; resize: vertical; }
-    input:focus, textarea:focus, select:focus { outline: 2px solid var(--blue); }
-    .modes { display: flex; gap: 8px; }
-    .mode { flex: 1; text-align: center; padding: 11px; border-radius: 11px; cursor: pointer;
-      background: var(--bg2); color: var(--muted); font-size: 14px; font-weight: 600;
-      user-select: none; border: 2px solid transparent; }
-    .mode.active { color: #fff; border-color: var(--blue); background: rgba(47,143,224,.12); }
-    button.go { width: 100%; padding: 14px; border: none; border-radius: 12px; cursor: pointer;
-      background: var(--blue); color: #fff; font-size: 15px; font-weight: 700; letter-spacing: .3px; }
-    button.go:disabled { opacity: .5; }
-    button.sm { padding: 9px 11px; border: none; border-radius: 9px; background: var(--blue);
-      color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; font-family: 'Open Sans'; }
-    button.del { background: rgba(252,133,68,.2); color: var(--orange); }
-    button.sm.off { background: rgba(130,160,168,.16); color: var(--muted); }
-    #status { margin-top: 12px; font-size: 14px; min-height: 18px; color: var(--muted); text-align: center; }
-    #status.ok { color: var(--green); } #status.err { color: var(--orange); }
-    .hint { font-size: 12px; color: var(--muted); margin-top: 7px; }
-    .sect { font-weight: 700; font-size: 18px; margin: 18px 2px 10px; }
-    .dl { display: flex; align-items: center; gap: 11px; background: var(--card);
-      border: 1px solid var(--line); border-radius: 14px; padding: 10px; margin-bottom: 10px; }
-    .thumb { width: 56px; height: 56px; border-radius: 10px; background: var(--card2);
-      flex: 0 0 auto; display: flex; align-items: center; justify-content: center; overflow: hidden; }
-    .thumb svg { width: 24px; height: 24px; fill: var(--muted); }
+    .card { background: var(--card); border-radius: var(--md-sys-shape-corner-extra-large); padding: 20px; margin-bottom: 16px; min-width: 0; }
+    label { display: block; margin-bottom: 12px; font-size: 14px; font-weight: 500; color: var(--muted); }
+    #status { margin-top: 12px; font-size: 14px; color: var(--muted); text-align: center; }
+    #status:empty { display: none; }
+    #status.ok, .st.ok { color: var(--green); } #status.err, .st.err { color: var(--orange); } .st.go { color: var(--blue); }
+    .hint { font-size: 12px; line-height: 1.6; color: var(--muted); margin-top: 12px; }
+    .sect { font-size: 28px; font-weight: 600; line-height: 1.3; margin: 8px 0 24px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .refresh { flex-shrink: 0; background: transparent; color: var(--blue); }
+    .dl { display: flex; align-items: center; gap: 12px; background: var(--card); border-radius: 16px; padding: 16px; margin-bottom: 8px; }
+    .thumb { width: 48px; height: 48px; border-radius: 16px; background: var(--md-sys-color-secondary-container); flex: 0 0 auto; display: grid; place-items: center; overflow: hidden; }
+    .thumb svg { width: 24px; height: 24px; fill: var(--md-sys-color-on-secondary-container); }
     .dl-info { flex: 1; min-width: 0; }
-    .dl-type { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 5px; }
-    .dl-name { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden;
-      text-overflow: ellipsis; margin: 2px 0; }
-    .dl-sub { font-size: 12px; color: var(--muted); }
-    .dl-info .bar-bg { margin: 6px 0 5px; }
-    .st { font-size: 12px; font-weight: 600; white-space: nowrap; flex: 0 0 auto; align-self: flex-end; }
-    .st.ok { color: var(--green); } .st.err { color: var(--orange); } .st.go { color: var(--blue); }
-    .stat-big { display: flex; gap: 8px; } .stat-big .card { flex: 1; text-align: center; }
-    .stat-num { font-family: 'Montserrat'; font-size: 24px; font-weight: 700; }
-    .row { display: flex; justify-content: space-between; align-items: center; gap: 8px;
-      padding: 7px 0; font-size: 13px; }
-    .muted { color: var(--muted); font-size: 12px; }
-    .empty { color: var(--muted); text-align: center; padding: 18px 0; font-size: 13px; }
-    .refresh { float: right; font-size: 12px; color: var(--blue); cursor: pointer; }
-    .seg { display: flex; gap: 6px; }
-    .seg .opt { flex: 1; text-align: center; padding: 9px; border-radius: 9px; background: var(--bg2);
-      color: var(--muted); font-size: 14px; cursor: pointer; border: 2px solid transparent; }
-    .seg .opt.on { color: #fff; border-color: var(--blue); }
-    .frm { display: flex; gap: 6px; margin-top: 8px; } .frm > * { flex: 1; }
-    .qgrid { display: flex; gap: 6px; }
-    .qgrid select { flex: 1; }
-    .prev { background: var(--card2); border: 1px solid var(--line); border-radius: 12px;
-      padding: 11px; margin-top: 10px; font-size: 13px; }
-    .prev .t { font-weight: 600; margin-bottom: 3px; }
-    .redo { background: rgba(47,143,224,.18); color: #7cbef2; border: none;
-      border-radius: 8px; padding: 5px 9px; font-size: 12px; cursor: pointer;
-      font-family: 'Open Sans'; margin-top: 5px; }
-    .tun { display: flex; justify-content: space-between; align-items: center;
-      gap: 10px; padding: 7px 0; font-size: 13px; }
-    .tun label { margin: 0; color: var(--text); font-size: 13px; flex: 1; }
-    .tun .sub { display: block; color: var(--muted); font-size: 11px; margin-top: 2px; }
-    .tun input { width: 82px; flex: 0 0 82px; text-align: center; padding: 8px; }
-    .ckbox { background: var(--bg2); border: 1px solid var(--line); border-radius: 12px;
-      padding: 12px; margin-top: 10px; }
-    .ckhead { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; }
+    .dl-type, .dl-sub, .muted { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+    .dl-name { font-weight: 500; font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin: 2px 0; }
+    .dl-info .bar-bg { margin: 8px 0; }
+    .st { font-size: 12px; font-weight: 500; flex: 0 0 auto; max-width: 96px; }
+    .stat-big { display: flex; gap: 12px; } .stat-big .card { flex: 1; text-align: center; padding: 20px 8px; }
+    .stat-big .card:first-child { background: var(--md-sys-color-primary-container); color: var(--md-sys-color-on-primary-container); }
+    .stat-num { font-size: clamp(24px, 5vw, 36px); line-height: 1.4; font-weight: 400; overflow-wrap: anywhere; }
+    .row, .tun { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 12px 0; font-size: 14px; }
+    .row > :first-child { min-width: 0; overflow-wrap: anywhere; }
+    .disclosure { width: 100%; min-height: 48px; text-align: left; color: var(--text); background: transparent; border: 0; font-weight: 500; }
+    .empty { color: var(--muted); text-align: center; padding: 48px 24px; background: var(--card); border-radius: 20px; font-size: 14px; }
+    .frm { display: flex; gap: 8px; margin-top: 8px; } .frm > * { flex: 1; min-width: 0; }
+    .qgrid { display: grid; gap: 12px; grid-template-columns: 1fr 1fr; }
+    .prev, .ckbox { background: var(--card2); border-radius: 16px; padding: 16px; margin-top: 12px; font-size: 14px; overflow-wrap: anywhere; }
+    .prev .t { font-weight: 500; margin-bottom: 4px; }
+    .redo { margin-top: 4px; }
+    .tun label { margin: 0; color: var(--text); font-size: 14px; flex: 1; }
+    .tun .sub { display: block; color: var(--muted); font-size: 12px; margin-top: 4px; font-weight: 400; }
+    .tun md-outlined-text-field { width: 104px; flex: 0 0 104px; }
+    .ckhead { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 14px; font-weight: 500; }
     .dot { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 10px; }
-    .ckmeta { color: var(--muted); font-size: 12px; margin-top: 5px; line-height: 1.5; }
-    .bar-bg { height: 6px; background: rgba(255,255,255,.08); border-radius: 4px; overflow: hidden; }
-    .bar-fill { height: 6px; background: var(--blue); border-radius: 4px; transition: width .4s ease; }
-    .bottomnav { position: fixed; left: 0; right: 0; bottom: 0; display: flex;
-      background: var(--bg2); border-top: 1px solid var(--line); padding: 8px 0 max(8px, env(safe-area-inset-bottom)); z-index: 10; }
-    .nav { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
-      color: var(--muted); cursor: pointer; user-select: none; }
-    .nav svg { width: 22px; height: 22px; fill: currentColor; }
-    .nav span { font-size: 11px; font-weight: 600; }
-    .nav.active { color: var(--blue); }
+    .ckmeta { color: var(--muted); font-size: 12px; margin-top: 8px; }
+    .bar-bg { height: 8px; background: var(--md-sys-color-secondary-container); border-radius: 8px; overflow: hidden; }
+    .bar-fill { height: 100%; background: var(--blue); border-radius: 8px; transition: width .3s ease; }
+    .bottomnav { position: fixed; inset: auto 0 0; display: flex; gap: 0; background: var(--md-sys-color-surface-container);
+      padding: 12px 8px calc(12px + var(--safe-bottom)); z-index: 10; }
+    .nav { position: relative; flex: 1; min-width: 0; min-height: 56px; display: flex; flex-direction: column; align-items: center; gap: 4px;
+      border: 0; border-radius: 16px; padding: 0 2px; background: transparent; color: var(--muted); }
+    .nav svg { width: 64px; height: 32px; padding: 4px 20px; border-radius: 20px; fill: currentColor; }
+    .nav span { font-size: 12px; font-weight: 500; }
+    .nav.active { color: var(--text); }
+    .nav.active svg { background: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container); }
+    .nav.active span { font-weight: 700; }
+    @media (max-width: 599px) {
+      .header { min-height: 64px; }
+      .card { padding: 16px; }
+    }
+    @media (min-width: 600px) {
+      body { padding-left: 120px; padding-right: 24px; padding-bottom: 32px; }
+      .bottomnav { inset: 0 auto 0 0; width: 96px; flex-direction: column; gap: 24px; padding: 112px 4px 24px; }
+      .nav { flex: 0 0 64px; justify-content: center; }
+      .nav span { font-size: 11px; }
+      .header { margin-bottom: 32px; }
+      .card { padding: 24px; }
+    }
+    @media (min-width: 1000px) {
+      #page-home.active { display: grid; grid-template-columns: 1.25fr 1fr; gap: 20px; grid-template-areas: "link mode" "link quality" "submit submit"; }
+      #page-home .card { margin: 0; }
+      .mode-card { grid-area: mode; } .link-card { grid-area: link; } .quality-card { grid-area: quality; } .download-action { grid-area: submit; }
+      #preview-box:empty { display: none; }
+      .link-card #url { min-height: 210px; }
+    }
+    @media (max-width: 359px) {
+      .dl2, .theme-control label { display: none; }
+      .card { padding: 16px; }
+      .qgrid { grid-template-columns: 1fr; }
+      .row { flex-wrap: wrap; }
+      .sect { flex-wrap: wrap; font-size: 24px; }
+      .dl { padding: 12px; gap: 8px; } .dl .thumb { display: none; }
+    }
+    /* Theme the official components through their public tokens. */
+    md-outlined-text-field, md-outlined-select { width: 100%; min-width: 0;
+      --md-outlined-text-field-container-shape: var(--md-sys-shape-corner-large);
+      --md-outlined-text-field-input-text-font: var(--md-ref-typeface-plain); }
+    md-outlined-select { --md-outlined-select-text-field-container-shape: var(--md-sys-shape-corner-large); }
+    md-select-option { --md-menu-item-one-line-container-height: 48px; }
+    #theme-sel { width: 128px; flex: 0 0 128px; --md-outlined-select-text-field-container-shape: var(--md-sys-shape-corner-extra-large); }
+    .theme-control > label { display: none; }
+    #url { --md-outlined-text-field-container-shape: var(--md-sys-shape-corner-large-increased); }
+    .link-card { position: relative; border: 1px solid var(--md-sys-color-outline-variant); }
+    .link-card > label { color: var(--text); font-weight: 600; font-size: 16px; }
+    .link-card::before { content: ""; display: block; width: 48px; height: 5px; margin-bottom: 16px;
+      border-radius: var(--md-sys-shape-corner-full);
+      background: linear-gradient(90deg, var(--md-sys-color-primary), var(--md-sys-color-tertiary)); }
+    md-filled-button, md-filled-tonal-button, md-filter-chip, md-text-button {
+      min-height: 48px; min-width: 48px; touch-action: manipulation;
+      --md-filled-button-container-height: 48px;
+      --md-filled-tonal-button-container-height: 48px;
+      --md-filter-chip-container-height: 48px;
+      --md-text-button-container-height: 48px; }
+    .go { width: 100%; --md-filled-tonal-button-container-height: 56px; }
+    #go { --md-filled-button-container-height: 64px; --md-filled-button-label-text-size: 18px;
+      --md-filled-button-container-shape: var(--md-sys-shape-corner-extra-large); }
+    .modes, .seg { display: flex; gap: 4px; }
+    .seg { flex-wrap: wrap; }
+    #tit-seg .opt { flex-basis: 120px; }
+    .mode, .seg .opt { flex: 1; min-width: 0;
+      --md-filter-chip-container-shape: var(--md-sys-shape-corner-large);
+      --md-filter-chip-outline-color: var(--md-sys-color-outline-variant);
+      --md-filter-chip-label-text-color: var(--text); }
+    .mode.active, .seg .opt.on {
+      border-radius: var(--md-sys-shape-corner-large);
+      background: var(--md-sys-color-secondary-container);
+      --md-filter-chip-outline-width: 0;
+      --md-filter-chip-label-text-color: var(--md-sys-color-on-secondary-container); }
+    .mode { --md-filter-chip-container-height: 64px; --md-filter-chip-label-text-size: 16px; }
+    .mode svg { width: 24px; height: 24px; fill: currentColor; }
+    .del { --md-filled-tonal-button-container-color: var(--md-sys-color-error-container);
+      --md-filled-tonal-button-label-text-color: var(--md-sys-color-on-error-container); }
+    .redo, .refresh { padding: 0; background: transparent; }
+    md-switch { flex: 0 0 auto; min-width: 52px; min-height: 48px; align-content: center; }
+    md-linear-progress { display: block; margin: 8px 0; }
+    .disclosure { position: relative; border-radius: var(--md-sys-shape-corner-medium); }
+    .input-tips { color: var(--muted); font-size: 14px; margin-top: 8px; }
+    .input-tips summary { min-height: 48px; padding-block: 12px; cursor: pointer; border-radius: var(--md-sys-shape-corner-small); }
+    .input-tips .hint:last-child { margin-bottom: 8px; }
+    #settings-status:empty { display: none; }
+    .stat-big .card:first-child { background: linear-gradient(135deg, var(--md-sys-color-primary-container), var(--md-sys-color-tertiary-container)); }
+    @media (max-width: 599px) {
+      #page-home .card { margin-bottom: 12px; }
+      .mode { --md-filter-chip-container-height: 56px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
+    }
   </style>
 </head>
 <body>
-  <div class="header">
+  <header class="header">
     <div class="logo-txt"><span class="sdp">s.d.p</span><span class="dl2">downloader</span></div>
-  </div>
-
+    <div class="theme-control">
+      <label for="theme-sel" data-i18n="theme_label">Тема</label>
+      <md-outlined-select id="theme-sel" data-i18n-aria="theme_label" menu-positioning="fixed">
+        <md-select-option value="auto" selected><span slot="headline" data-i18n="theme_auto">Авто</span></md-select-option>
+        <md-select-option value="light"><span slot="headline" data-i18n="theme_light">Світла</span></md-select-option>
+        <md-select-option value="dark"><span slot="headline" data-i18n="theme_dark">Темна</span></md-select-option>
+      </md-outlined-select>
+    </div>
+  </header>
+  <main>
+  <div id="local-preview-note" class="hint" role="status" hidden data-i18n="local_preview"></div>
   <!-- HOME -->
   <div class="page active" id="page-home">
-    <div class="card">
-      <label data-i18n="mode_label">Режим</label>
-      <div class="modes">
-        <div class="mode active" data-mode="video" data-i18n="mode_video">🎬 Відео</div>
-        <div class="mode" data-mode="audio" data-i18n="mode_audio">🎵 MP3</div>
-      </div>
-    </div>
-    <div class="card">
-      <label data-i18n="paste_label">Вставте посилання (можна кілька, кожне з нового рядка)</label>
-      <textarea id="url" placeholder="TikTok / YouTube / Instagram / Facebook…"></textarea>
-      <div class="hint" data-i18n="ext_hint">MP3 і повне YouTube — для розширеного доступу.</div>
+    <div class="card link-card">
+      <label for="url" data-i18n="paste_label">Вставте посилання (можна кілька, кожне з нового рядка)</label>
+      <md-outlined-text-field type="textarea" rows="3" id="url" spellcheck="false" autocapitalize="off" placeholder="TikTok / YouTube / Instagram / Facebook…" data-i18n-supporting="links_hint"></md-outlined-text-field>
+      <details class="input-tips"><summary data-i18n="tips_label">Підказки</summary>
+      <div class="hint" id="url-hint" data-i18n="ext_hint">MP3 і повне YouTube — для розширеного доступу.</div>
       <div class="hint" data-i18n="trim_hint">Обрізка: додай час у кінці, напр. 0:10-0:30. Плейлисти YouTube — цілком (до ліміту).</div>
+      </details>
       <div id="preview-inline"></div>
     </div>
-    <div class="card">
-      <label data-i18n="quality_label">Якість / бітрейт</label>
+    <div class="card mode-card">
+      <label data-i18n="mode_label">Режим</label>
+      <div class="modes">
+        <md-filter-chip type="button" class="mode active" data-mode="video"><svg slot="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h12v5l5-3v10l-5-3v5H4z"/></svg><span data-i18n="mode_video">Відео</span></md-filter-chip>
+        <md-filter-chip type="button" class="mode" data-mode="audio"><svg slot="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 3v12a4 4 0 1 0 2 3V7h7V3z"/></svg><span data-i18n="mode_audio">MP3</span></md-filter-chip>
+      </div>
+    </div>
+    <div class="card quality-card">
+      <label id="quality-label" data-i18n="quality_label">Якість / бітрейт</label>
       <div class="qgrid">
-        <select id="q-video">
-          <option value="" data-i18n="q_auto">Авто</option>
-          <option value="2160">4K (2160p)</option>
-          <option value="1440">2K (1440p)</option>
-          <option value="1080">1080p</option>
-          <option value="720">720p</option>
-          <option value="480">480p</option>
-          <option value="360">360p</option>
-        </select>
-        <select id="q-abr">
-          <option value="" data-i18n="abr_auto">MP3: найкращий</option>
-          <option value="320">MP3: 320 kbps</option>
-          <option value="192">MP3: 192 kbps</option>
-          <option value="128">MP3: 128 kbps</option>
-        </select>
+        <md-outlined-select id="q-video" data-i18n-aria="video_quality" menu-positioning="fixed">
+          <md-select-option value="" selected><span slot="headline" data-i18n="q_auto">Авто</span></md-select-option>
+          <md-select-option value="2160"><span slot="headline">4K (2160p)</span></md-select-option>
+          <md-select-option value="1440"><span slot="headline">2K (1440p)</span></md-select-option>
+          <md-select-option value="1080"><span slot="headline">1080p</span></md-select-option>
+          <md-select-option value="720"><span slot="headline">720p</span></md-select-option>
+          <md-select-option value="480"><span slot="headline">480p</span></md-select-option>
+          <md-select-option value="360"><span slot="headline">360p</span></md-select-option>
+        </md-outlined-select>
+        <md-outlined-select id="q-abr" data-i18n-aria="audio_quality" menu-positioning="fixed">
+          <md-select-option value="" selected><span slot="headline" data-i18n="abr_auto">MP3: найкращий</span></md-select-option>
+          <md-select-option value="320"><span slot="headline">MP3: 320 kbps</span></md-select-option>
+          <md-select-option value="192"><span slot="headline">MP3: 192 kbps</span></md-select-option>
+          <md-select-option value="128"><span slot="headline">MP3: 128 kbps</span></md-select-option>
+        </md-outlined-select>
       </div>
       <div class="hint" data-i18n="quality_hint">Якість діє на відео, бітрейт — на MP3. Якщо потрібної якості немає, візьметься найближча нижча.</div>
     </div>
     <div id="preview-box"></div>
-    <button class="go" id="go" data-i18n="dl_btn">ЗАВАНТАЖИТИ ↓</button>
-    <div id="status"></div>
+    <div class="download-action">
+    <md-filled-button class="go" id="go" data-i18n="dl_btn">ЗАВАНТАЖИТИ ↓</md-filled-button>
+    <div id="status" role="status" aria-live="polite"></div>
+    </div>
   </div>
 
   <!-- ACTIVITY -->
   <div class="page" id="page-activity">
-    <div class="sect"><span data-i18n="recent_title">Останні завантаження</span><span class="refresh" id="refresh-act" data-i18n="refresh">↻ Оновити</span></div>
+    <div class="sect"><span data-i18n="recent_title">Останні завантаження</span><md-text-button type="button" class="refresh" id="refresh-act" data-i18n="refresh">↻ Оновити</md-text-button></div>
     <div id="live"></div>
     <div id="activity"><div class="empty">…</div></div>
   </div>
@@ -183,76 +320,77 @@
   <!-- SETTINGS -->
   <div class="page" id="page-settings">
     <div class="sect" data-i18n="settings_title">Налаштування</div>
+    <div id="settings-status" class="hint" role="status"></div>
     <div id="settings-body">
       <div class="card">
         <label data-i18n="lang_label">Мова інтерфейсу</label>
-        <select id="lang-sel">
-          <option value="uk">Українська</option>
-          <option value="en">English</option>
-        </select>
+        <md-outlined-select id="lang-sel" data-i18n-aria="lang_label" menu-positioning="fixed">
+          <md-select-option value="uk" selected><span slot="headline">Українська</span></md-select-option>
+          <md-select-option value="en"><span slot="headline">English</span></md-select-option>
+        </md-outlined-select>
       </div>
       <div class="card">
         <div class="row" style="padding:0">
           <span data-i18n="wl_label">Білий список чатів</span>
-          <div class="seg" style="width:120px"><div class="opt" data-wl="1" data-i18n="on">Увімк</div><div class="opt" data-wl="0" data-i18n="off">Вимк</div></div>
+          <md-switch icons data-setting="whitelist"></md-switch>
         </div>
         <div class="hint" data-i18n="wl_hint">Вимкнено — бот працює в будь-якому чаті. Увімкнено — тільки в чатах зі списку; у приваті відповідає лише адміну.</div>
       </div>
       <div class="card">
         <div class="row" style="padding:0">
           <span data-i18n="notify_label">Повідомляти про відсутність доступу</span>
-          <div class="seg" style="width:120px"><div class="opt" data-notify="1" data-i18n="yes">Так</div><div class="opt" data-notify="0" data-i18n="no">Ні</div></div>
+          <md-switch icons data-setting="notify_no_access"></md-switch>
         </div>
       </div>
       <div class="card">
         <div class="row" style="padding:0">
           <span data-i18n="cache_label">Кешувати завантаження</span>
-          <div class="seg" style="width:120px"><div class="opt" data-cache="1" data-i18n="yes">Так</div><div class="opt" data-cache="0" data-i18n="no">Ні</div></div>
+          <md-switch icons data-setting="cache"></md-switch>
         </div>
         <div class="hint" data-i18n="cache_hint">Зберігає file_id, щоб повторні посилання надсилались миттєво.</div>
         <div class="hint" id="cache-info"></div>
-          <div class="tun"><label data-i18n="tl_cache_max">Скільки записів тримати<span class="sub" data-i18n="tl_cache_max_s">старі витісняються</span></label><input type="number" id="t-cache_max" min="10" max="100000"></div>
-          <div class="tun"><label data-i18n="tl_cache_clear_days">Чистити раз на N днів<span class="sub" data-i18n="tl_cache_clear_days_s">0 — не чистити</span></label><input type="number" id="t-cache_clear_days" min="0" max="365"></div>
-        <button class="go" id="cache-clear" style="margin-top:10px" data-i18n="cache_clear">Очистити кеш зараз</button>
+          <div class="tun"><label data-i18n="tl_cache_max">Скільки записів тримати<span class="sub" data-i18n="tl_cache_max_s">старі витісняються</span></label><md-outlined-text-field type="number" id="t-cache_max" min="10" max="100000"></md-outlined-text-field></div>
+          <div class="tun"><label data-i18n="tl_cache_clear_days">Чистити раз на N днів<span class="sub" data-i18n="tl_cache_clear_days_s">0 — не чистити</span></label><md-outlined-text-field type="number" id="t-cache_clear_days" min="0" max="365"></md-outlined-text-field></div>
+        <md-filled-tonal-button class="go" id="cache-clear" style="margin-top:10px" data-i18n="cache_clear">Очистити кеш зараз</md-filled-tonal-button>
         <div class="hint" id="cache-status" style="text-align:center"></div>
       </div>
       <div class="card">
-        <div class="row" style="padding:0;cursor:pointer" id="beh-toggle">
+        <button type="button" class="row disclosure" id="beh-toggle" aria-controls="beh-list" aria-expanded="false">
           <span data-i18n="beh_label">Якість і поведінка</span>
           <span class="muted" id="beh-arrow">▾</span>
-        </div>
+        <md-ripple></md-ripple><md-focus-ring inward></md-focus-ring></button>
         <div class="hint" data-i18n="beh_hint">Стеля якості, плейлисти й перевірки. Діють одразу, без перезапуску.</div>
         <div id="beh-list" style="display:none;margin-top:10px">
-          <div class="tun"><label data-i18n="tl_max_height">Стеля якості коротких відео, p<span class="sub" data-i18n="tl_max_height_s">TikTok, Reels, Shorts</span></label><input type="number" id="t-max_height" min="240" max="4320"></div>
-          <div class="tun"><label data-i18n="tl_long_max_height">Стеля довгих відео, p<span class="sub" data-i18n="tl_long_max_height_s">4320 · 2160 · 1440 · 1080</span></label><input type="number" id="t-long_max_height" min="360" max="4320"></div>
-          <div class="tun"><label data-i18n="tl_long_min_height">Нижня межа довгих відео, p<span class="sub" data-i18n="tl_long_min_height_s">нижче не опускається</span></label><input type="number" id="t-long_min_height" min="144" max="4320"></div>
-          <div class="tun"><label data-i18n="tl_playlist_max">Роликів з плейлиста<span class="sub" data-i18n="tl_playlist_max_s">решта ігнорується</span></label><input type="number" id="t-playlist_max" min="1" max="100"></div>
-          <div class="tun"><label data-i18n="tl_long_job_notify">Писати «готово» після N секунд<span class="sub" data-i18n="tl_long_job_notify_s">0 — не писати</span></label><input type="number" id="t-long_job_notify" min="0" max="600"></div>
+          <div class="tun"><label data-i18n="tl_max_height">Стеля якості коротких відео, p<span class="sub" data-i18n="tl_max_height_s">TikTok, Reels, Shorts</span></label><md-outlined-text-field type="number" id="t-max_height" min="240" max="4320"></md-outlined-text-field></div>
+          <div class="tun"><label data-i18n="tl_long_max_height">Стеля довгих відео, p<span class="sub" data-i18n="tl_long_max_height_s">4320 · 2160 · 1440 · 1080</span></label><md-outlined-text-field type="number" id="t-long_max_height" min="360" max="4320"></md-outlined-text-field></div>
+          <div class="tun"><label data-i18n="tl_long_min_height">Нижня межа довгих відео, p<span class="sub" data-i18n="tl_long_min_height_s">нижче не опускається</span></label><md-outlined-text-field type="number" id="t-long_min_height" min="144" max="4320"></md-outlined-text-field></div>
+          <div class="tun"><label data-i18n="tl_playlist_max">Роликів з плейлиста<span class="sub" data-i18n="tl_playlist_max_s">решта ігнорується</span></label><md-outlined-text-field type="number" id="t-playlist_max" min="1" max="100"></md-outlined-text-field></div>
+          <div class="tun"><label data-i18n="tl_long_job_notify">Писати «готово» після N секунд<span class="sub" data-i18n="tl_long_job_notify_s">0 — не писати</span></label><md-outlined-text-field type="number" id="t-long_job_notify" min="0" max="600"></md-outlined-text-field></div>
           <div class="row" style="padding:8px 0 0"><span data-i18n="fl_thumbnails">Мініатюри до відео</span>
-            <div class="seg" style="width:120px"><div class="opt" data-flag="thumbnails" data-val="1" data-i18n="yes">Так</div><div class="opt" data-flag="thumbnails" data-val="0" data-i18n="no">Ні</div></div></div>
+            <md-switch icons data-setting="thumbnails" data-setting-flag></md-switch></div>
           <div class="row" style="padding:8px 0 0"><span data-i18n="fl_verify">Перевіряти файл перед відправкою</span>
-            <div class="seg" style="width:120px"><div class="opt" data-flag="verify_media" data-val="1" data-i18n="yes">Так</div><div class="opt" data-flag="verify_media" data-val="0" data-i18n="no">Ні</div></div></div>
+            <md-switch icons data-setting="verify_media" data-setting-flag></md-switch></div>
           <div class="row" style="padding:8px 0 0"><span data-i18n="fl_deep">Глибока перевірка (повний декод)</span>
-            <div class="seg" style="width:120px"><div class="opt" data-flag="verify_deep" data-val="1" data-i18n="yes">Так</div><div class="opt" data-flag="verify_deep" data-val="0" data-i18n="no">Ні</div></div></div>
+            <md-switch icons data-setting="verify_deep" data-setting-flag></md-switch></div>
           <div class="hint" data-i18n="verify_hint">Перевірка відсіює биті й німі файли. Вимикай лише щоб зрозуміти, чому щось відхилило.</div>
-          <button class="go" id="beh-save" style="margin-top:10px" data-i18n="save">Зберегти</button>
+          <md-filled-tonal-button class="go" id="beh-save" style="margin-top:10px" data-i18n="save">Зберегти</md-filled-tonal-button>
           <div id="beh-status" class="hint" style="text-align:center"></div>
         </div>
       </div>
       <div class="card">
         <label data-i18n="engines_label">Рушії</label>
         <div class="row" style="padding:6px 0 0"><span>Cobalt</span>
-          <div class="seg" style="width:120px"><div class="opt" data-flag="eng_cobalt" data-val="1" data-i18n="on">Увімк</div><div class="opt" data-flag="eng_cobalt" data-val="0" data-i18n="off">Вимк</div></div></div>
+          <md-switch icons data-setting="eng_cobalt" data-setting-flag></md-switch></div>
         <div class="row" style="padding:6px 0 0"><span>tikwm</span>
-          <div class="seg" style="width:120px"><div class="opt" data-flag="eng_tikwm" data-val="1" data-i18n="on">Увімк</div><div class="opt" data-flag="eng_tikwm" data-val="0" data-i18n="off">Вимк</div></div></div>
+          <md-switch icons data-setting="eng_tikwm" data-setting-flag></md-switch></div>
         <div class="hint" data-i18n="engines_hint">Cobalt — Instagram/Facebook і страховка. tikwm — фото й каруселі TikTok. Вимикай, лише якщо рушій зламався.</div>
       </div>
       <div class="card">
         <label data-i18n="engine_label">Рушій для Instagram / Facebook</label>
         <div class="seg" id="eng-seg">
-          <div class="opt" data-eng="auto" data-i18n="eng_auto">Авто</div>
-          <div class="opt" data-eng="cobalt">Cobalt</div>
-          <div class="opt" data-eng="ytdlp">yt-dlp</div>
+          <md-filter-chip type="button" class="opt" data-eng="auto" data-i18n="eng_auto">Авто</md-filter-chip>
+          <md-filter-chip type="button" class="opt" data-eng="cobalt">Cobalt</md-filter-chip>
+          <md-filter-chip type="button" class="opt" data-eng="ytdlp">yt-dlp</md-filter-chip>
         </div>
         <div class="hint" data-i18n="engine_hint">«Авто»: є cookies — першим іде yt-dlp (краща якість), немає — Cobalt.</div>
       </div>
@@ -261,72 +399,72 @@
         <div id="ck-box" class="ckbox"></div>
         <div class="tun" style="margin-top:10px">
           <label data-i18n="ck_warn_label">Попередити за N днів до кінця<span class="sub" data-i18n="ck_warn_sub">0 — не нагадувати</span></label>
-          <input type="number" id="t-cookies_warn_days" min="0" max="60">
+          <md-outlined-text-field type="number" id="t-cookies_warn_days" min="0" max="60"></md-outlined-text-field>
         </div>
-        <button class="go" id="ck-save" data-i18n="save">Зберегти</button>
+        <md-filled-tonal-button class="go" id="ck-save" data-i18n="save">Зберегти</md-filled-tonal-button>
         <div class="hint" data-i18n="ck_send_hint">Щоб оновити — надішли файл cookies.txt боту в приват.</div>
       </div>
       <div class="card">
         <label data-i18n="backup_label">Резервна копія</label>
         <div class="hint" data-i18n="backup_hint">Копія бази зі статистикою, налаштуваннями та білими списками. Бот надішле файл тобі в приват.</div>
-        <button class="go" id="bk-send" style="margin-top:10px" data-i18n="backup_btn">Зробити копію</button>
+        <md-filled-tonal-button class="go" id="bk-send" style="margin-top:10px" data-i18n="backup_btn">Зробити копію</md-filled-tonal-button>
         <div class="hint" style="margin-top:8px" data-i18n="restore_hint">Щоб відновити — надішли файл .db боту в приват. Він перевірить його, поставить на місце, а стару базу збереже поруч.</div>
         <div class="hint" id="bk-status" style="text-align:center"></div>
       </div>
       <div class="card">
-        <div class="row" style="padding:0;cursor:pointer" id="tun-toggle">
+        <button type="button" class="row disclosure" id="tun-toggle" aria-controls="tun-list" aria-expanded="false">
           <span data-i18n="limits_label">Навантаження та ліміти</span>
           <span class="muted" id="tun-arrow">▾</span>
-        </div>
+        <md-ripple></md-ripple><md-focus-ring inward></md-focus-ring></button>
         <div class="hint" data-i18n="limits_hint">Діють одразу, без перезапуску. Порожнє поле = значення з env.</div>
         <div id="tun-list" style="display:none;margin-top:10px">
-          <div class="tun"><label data-i18n="tl_max_links">Силок з одного повідомлення<span class="sub" data-i18n="tl_max_links_s">решта ігнорується</span></label><input type="number" id="t-max_links" min="1" max="50"></div>
-          <div class="tun"><label data-i18n="tl_per_user">Паралельних завантажень на юзера<span class="sub" data-i18n="tl_per_user_s">решта чекає в черзі</span></label><input type="number" id="t-max_per_user" min="1" max="20"></div>
-          <div class="tun"><label data-i18n="tl_interval">Пауза між відправками в чат, с<span class="sub" data-i18n="tl_interval_s">проти ліміту Telegram 20/хв</span></label><input type="number" id="t-chat_interval" min="0" max="10" step="0.1"></div>
-          <div class="tun"><label data-i18n="tl_flood">Повторів при ліміті Telegram (429)<span class="sub" data-i18n="tl_flood_s">чекає і надсилає знову</span></label><input type="number" id="t-flood_retries" min="0" max="20"></div>
-          <div class="tun"><label data-i18n="tl_job">Повторів завдання при збої<span class="sub" data-i18n="tl_job_s">мережа/таймаут</span></label><input type="number" id="t-job_retries" min="0" max="5"></div>
-          <div class="tun"><label data-i18n="tl_job_delay">Пауза перед повтором завдання, с<span class="sub" data-i18n="tl_job_delay_s"></span></label><input type="number" id="t-job_retry_delay" min="0" max="60" step="1"></div>
-          <div class="tun"><label data-i18n="tl_cob">Спроб Cobalt<span class="sub" data-i18n="tl_cob_s">Instagram часто віддає нормальний файл з другої</span></label><input type="number" id="t-cobalt_retries" min="1" max="5"></div>
-          <div class="tun"><label data-i18n="tl_cob_delay">Пауза між спробами Cobalt, с<span class="sub" data-i18n="tl_cob_delay_s"></span></label><input type="number" id="t-cobalt_retry_delay" min="0" max="30" step="0.5"></div>
-          <div class="tun"><label data-i18n="tl_max_concurrent">Паралельних завантажень усього<span class="sub" data-i18n="tl_max_concurrent_s">спільна черга бота</span></label><input type="number" id="t-max_concurrent" min="1" max="32"></div>
-          <div class="tun"><label data-i18n="tl_frag_concurrency">Потоків на файл<span class="sub" data-i18n="tl_frag_concurrency_s">більше — швидше, але помітніше</span></label><input type="number" id="t-frag_concurrency" min="1" max="16"></div>
-          <div class="tun"><label data-i18n="tl_check_minutes">Перевіряти оновлення раз на N хвилин<span class="sub" data-i18n="tl_check_minutes_s">0 — не перевіряти</span></label><input type="number" id="t-check_minutes" min="0" max="10080"></div>
+          <div class="tun"><label data-i18n="tl_max_links">Силок з одного повідомлення<span class="sub" data-i18n="tl_max_links_s">решта ігнорується</span></label><md-outlined-text-field type="number" id="t-max_links" min="1" max="50"></md-outlined-text-field></div>
+          <div class="tun"><label data-i18n="tl_per_user">Паралельних завантажень на юзера<span class="sub" data-i18n="tl_per_user_s">решта чекає в черзі</span></label><md-outlined-text-field type="number" id="t-max_per_user" min="1" max="20"></md-outlined-text-field></div>
+          <div class="tun"><label data-i18n="tl_interval">Пауза між відправками в чат, с<span class="sub" data-i18n="tl_interval_s">проти ліміту Telegram 20/хв</span></label><md-outlined-text-field type="number" id="t-chat_interval" min="0" max="10" step="0.1"></md-outlined-text-field></div>
+          <div class="tun"><label data-i18n="tl_flood">Повторів при ліміті Telegram (429)<span class="sub" data-i18n="tl_flood_s">чекає і надсилає знову</span></label><md-outlined-text-field type="number" id="t-flood_retries" min="0" max="20"></md-outlined-text-field></div>
+          <div class="tun"><label data-i18n="tl_job">Повторів завдання при збої<span class="sub" data-i18n="tl_job_s">мережа/таймаут</span></label><md-outlined-text-field type="number" id="t-job_retries" min="0" max="5"></md-outlined-text-field></div>
+          <div class="tun"><label data-i18n="tl_job_delay">Пауза перед повтором завдання, с<span class="sub" data-i18n="tl_job_delay_s"></span></label><md-outlined-text-field type="number" id="t-job_retry_delay" min="0" max="60" step="1"></md-outlined-text-field></div>
+          <div class="tun"><label data-i18n="tl_cob">Спроб Cobalt<span class="sub" data-i18n="tl_cob_s">Instagram часто віддає нормальний файл з другої</span></label><md-outlined-text-field type="number" id="t-cobalt_retries" min="1" max="5"></md-outlined-text-field></div>
+          <div class="tun"><label data-i18n="tl_cob_delay">Пауза між спробами Cobalt, с<span class="sub" data-i18n="tl_cob_delay_s"></span></label><md-outlined-text-field type="number" id="t-cobalt_retry_delay" min="0" max="30" step="0.5"></md-outlined-text-field></div>
+          <div class="tun"><label data-i18n="tl_max_concurrent">Паралельних завантажень усього<span class="sub" data-i18n="tl_max_concurrent_s">спільна черга бота</span></label><md-outlined-text-field type="number" id="t-max_concurrent" min="1" max="32"></md-outlined-text-field></div>
+          <div class="tun"><label data-i18n="tl_frag_concurrency">Потоків на файл<span class="sub" data-i18n="tl_frag_concurrency_s">більше — швидше, але помітніше</span></label><md-outlined-text-field type="number" id="t-frag_concurrency" min="1" max="16"></md-outlined-text-field></div>
+          <div class="tun"><label data-i18n="tl_check_minutes">Перевіряти оновлення раз на N хвилин<span class="sub" data-i18n="tl_check_minutes_s">0 — не перевіряти</span></label><md-outlined-text-field type="number" id="t-check_minutes" min="0" max="10080"></md-outlined-text-field></div>
           <div class="row" style="padding:8px 0 0"><span data-i18n="fl_sleep">Паузи між запитами yt-dlp</span>
-            <div class="seg" style="width:120px"><div class="opt" data-flag="ytdlp_sleep" data-val="1" data-i18n="yes">Так</div><div class="opt" data-flag="ytdlp_sleep" data-val="0" data-i18n="no">Ні</div></div></div>
+            <md-switch icons data-setting="ytdlp_sleep" data-setting-flag></md-switch></div>
           <div class="hint" data-i18n="sleep_hint">Паузи знижують ризик тимчасового блокування, але завантаження стає повільнішим.</div>
-          <button class="go" id="tun-save" style="margin-top:10px" data-i18n="save">Зберегти</button>
+          <md-filled-tonal-button class="go" id="tun-save" style="margin-top:10px" data-i18n="save">Зберегти</md-filled-tonal-button>
           <div id="tun-status" class="hint" style="text-align:center"></div>
         </div>
       </div>
       <div class="card">
-        <div class="row" style="padding:0;cursor:pointer" id="svc-toggle">
+        <button type="button" class="row disclosure" id="svc-toggle" aria-controls="svc-list" aria-expanded="false">
           <span data-i18n="services_label">Сервіси (платформи)</span>
           <span class="muted" id="svc-arrow">▾</span>
-        </div>
+        <md-ripple></md-ripple><md-focus-ring inward></md-focus-ring></button>
         <div class="hint" data-i18n="services_hint">Нові сервіси вимкнені. Увімкни те, що треба.</div>
         <div id="svc-list" style="display:none;margin-top:8px"></div>
       </div>
       <div class="card">
         <label data-i18n="titles_label">Назва відео / поста</label>
         <div class="seg" id="tit-seg">
-          <div class="opt" data-titles="off" data-i18n="tit_off">Не слати</div>
-          <div class="opt" data-titles="private" data-i18n="tit_priv">Лише в приват</div>
-          <div class="opt" data-titles="all" data-i18n="tit_all">Скрізь</div>
+          <md-filter-chip type="button" class="opt" data-titles="off" data-i18n="tit_off">Не слати</md-filter-chip>
+          <md-filter-chip type="button" class="opt" data-titles="private" data-i18n="tit_priv">Лише в приват</md-filter-chip>
+          <md-filter-chip type="button" class="opt" data-titles="all" data-i18n="tit_all">Скрізь</md-filter-chip>
         </div>
         <div class="hint" data-i18n="titles_hint">Назва додається підписом до файлу. У групах може бути зайвою — тоді лишай «Лише в приват».</div>
       </div>
       <div class="card">
         <div class="row" style="padding:0">
           <span data-i18n="audio_too_label">Трек окремим MP3</span>
-          <div class="seg" style="width:120px"><div class="opt" data-audiotoo="1" data-i18n="yes">Так</div><div class="opt" data-audiotoo="0" data-i18n="no">Ні</div></div>
+          <md-switch icons data-setting="audio_too"></md-switch>
         </div>
         <div class="hint" data-i18n="audio_too_hint">До коротких відео (TikTok, Reels, Shorts) додатково надсилається звукова доріжка окремим файлом.</div>
       </div>
       <div class="card">
         <label data-i18n="add_chat">Додати чат</label>
         <div class="frm">
-          <input id="acc-ident" data-i18n-ph="ph_chat" placeholder="id чату (напр. -100123…)">
-          <button class="sm" id="acc-add" style="flex:0 0 auto" data-i18n="add">Додати</button>
+          <md-outlined-text-field id="acc-ident" data-i18n-aria="add_chat" data-i18n-ph="ph_chat" placeholder="id чату (напр. -100123…)"></md-outlined-text-field>
+          <md-filled-tonal-button class="sm" id="acc-add" style="flex:0 0 auto" data-i18n="add">Додати</md-filled-tonal-button>
         </div>
         <div class="hint" data-i18n="wl_note">Дізнатись id: додай бота в чат і надішли там /id. Назва підтягнеться сама, коли в чаті щось завантажать.</div>
       </div>
@@ -337,15 +475,35 @@
     </div>
   </div>
 
+  </main>
   <!-- BOTTOM NAV -->
-  <nav class="bottomnav">
-    <div class="nav active" data-page="home"><svg viewBox="0 0 24 24"><path d="M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg><span data-i18n="nav_home">Головна</span></div>
-    <div class="nav" data-page="activity"><svg viewBox="0 0 24 24"><path d="M13 2L4.5 13H11l-1 9 8.5-11H12l1-9z"/></svg><span data-i18n="nav_activity">Активність</span></div>
-    <div class="nav" data-page="stats"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="4" height="9" rx="1"/><rect x="10" y="6" width="4" height="14" rx="1"/><rect x="17" y="14" width="4" height="6" rx="1"/></svg><span data-i18n="nav_stats">Статистика</span></div>
-    <div class="nav" data-page="settings"><svg viewBox="0 0 24 24"><path d="M12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7zM19.4 13a7.5 7.5 0 0 0 0-2l2-1.5-2-3.5-2.4 1a7.6 7.6 0 0 0-1.7-1L15 3H9l-.4 2.6a7.6 7.6 0 0 0-1.7 1l-2.4-1-2 3.5L2.6 11a7.5 7.5 0 0 0 0 2l-2 1.5 2 3.5 2.4-1a7.6 7.6 0 0 0 1.7 1L9 21h6l.4-2.6a7.6 7.6 0 0 0 1.7-1l2.4 1 2-3.5z"/></svg><span data-i18n="nav_settings">Налаштування</span></div>
+  <nav class="bottomnav" data-i18n-aria="main_nav">
+    <button type="button" class="nav active" data-page="home"><svg viewBox="0 0 24 24"><path d="M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg><span data-i18n="nav_home">Головна</span><md-ripple></md-ripple><md-focus-ring inward></md-focus-ring></button>
+    <button type="button" class="nav" data-page="activity"><svg viewBox="0 0 24 24"><path d="M13 2L4.5 13H11l-1 9 8.5-11H12l1-9z"/></svg><span data-i18n="nav_activity">Активність</span><md-ripple></md-ripple><md-focus-ring inward></md-focus-ring></button>
+    <button type="button" class="nav" data-page="stats"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="4" height="9" rx="1"/><rect x="10" y="6" width="4" height="14" rx="1"/><rect x="17" y="14" width="4" height="6" rx="1"/></svg><span data-i18n="nav_stats">Статистика</span><md-ripple></md-ripple><md-focus-ring inward></md-focus-ring></button>
+    <button type="button" class="nav" data-page="settings"><svg viewBox="0 0 24 24"><path d="M12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7zM19.4 13a7.5 7.5 0 0 0 0-2l2-1.5-2-3.5-2.4 1a7.6 7.6 0 0 0-1.7-1L15 3H9l-.4 2.6a7.6 7.6 0 0 0-1.7 1l-2.4-1-2 3.5L2.6 11a7.5 7.5 0 0 0 0 2l-2 1.5 2 3.5 2.4-1a7.6 7.6 0 0 0 1.7 1L9 21h6l.4-2.6a7.6 7.6 0 0 0 1.7-1l2.4 1 2-3.5z"/></svg><span data-i18n="nav_settings">Налаштування</span><md-ripple></md-ripple><md-focus-ring inward></md-focus-ring></button>
   </nav>
 
   <script>
+    (async () => {
+    const localPreview = location.protocol === "file:";
+    // A double-click uses the adjacent build; the bot serves the same bundle
+    // through its exact, allowlisted route. No CDN or module server is needed.
+    await new Promise(resolve => {
+      const script = document.createElement("script");
+      script.src = localPreview ? "./static/material.js" : "/assets/material.js";
+      script.onload = script.onerror = resolve;
+      document.head.append(script);
+    });
+    if (!customElements.get("md-filled-button")) {
+      document.querySelector("main").innerHTML = '<div class="empty" role="alert">Не вдалося завантажити інтерфейс. Виконай npm ci та npm run build у папці проєкту; папка static має бути поруч з index.html.<br>Interface failed to load. Run npm ci and npm run build; keep static beside index.html.</div>';
+      return;
+    }
+    await Promise.all(Array.from(document.querySelectorAll("*")).filter(el => el.localName.startsWith("md-")).map(el => el.updateComplete));
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const syncMotion = () => document.querySelectorAll("md-outlined-select").forEach(el => { el.quick = reducedMotion.matches; });
+    reducedMotion.addEventListener("change", syncMotion);
+    syncMotion();
     const tg = window.Telegram ? window.Telegram.WebApp : null;
     if (tg) { tg.ready(); tg.expand(); }
     const initData = tg ? tg.initData : "";
@@ -353,12 +511,15 @@
     // ---- i18n ----
     const I = {
       uk: {
-        mode_label:"Режим", mode_video:"🎬 Відео", mode_audio:"🎵 MP3",
-        paste_label:"Вставте посилання (можна кілька, кожне з нового рядка)",
+        local_preview:"Локальний перегляд дизайну. Дані бота не підключені; завантаження й збереження налаштувань доступні лише через Telegram.",
+        tips_label:"Підказки", links_hint:"Кілька посилань — кожне з нового рядка.", theme_label:"Тема", theme_auto:"Авто", theme_light:"Світла", theme_dark:"Темна",
+        video_quality:"Якість відео", audio_quality:"Бітрейт MP3", main_nav:"Основна навігація", remove_chat:"Видалити чат",
+        mode_label:"Режим", mode_video:"Відео", mode_audio:"MP3",
+        paste_label:"Посилання для завантаження",
         ext_hint:"MP3 і повне YouTube — для розширеного доступу.",
         trim_hint:"Обрізка: додай час у кінці, напр. 0:10-0:30. Плейлисти YouTube — цілком (до ліміту).",
-        dl_btn:"ЗАВАНТАЖИТИ ↓", recent_title:"Останні завантаження", refresh:"↻ Оновити",
-        quality_label:"Якість / бітрейт", q_auto:"Авто", abr_auto:"MP3: найкращий",
+        dl_btn:"Завантажити ↓", recent_title:"Останні завантаження", refresh:"↻ Оновити",
+        quality_label:"Якість / бітрейт", q_auto:"Авто", abr_auto:"MP3: авто",
         quality_hint:"Якість діє на відео, бітрейт — на MP3. Якщо потрібної якості немає, візьметься найближча нижча.",
         checking:"Дивлюсь…", nope:"Не вдалось дізнатись",
         redo:"↻ Ще раз", redo_sent:"✅ У черзі",
@@ -441,11 +602,14 @@
         st_queued:"У черзі", st_toobig:"Завелике", eta:"⏱"
       },
       en: {
-        mode_label:"Mode", mode_video:"🎬 Video", mode_audio:"🎵 MP3",
-        paste_label:"Paste link(s) — one per line",
+        local_preview:"Local design preview. Bot data is not connected; downloads and saving settings are available only through Telegram.",
+        tips_label:"Tips", links_hint:"Multiple links — one per line.", theme_label:"Theme", theme_auto:"Auto", theme_light:"Light", theme_dark:"Dark",
+        video_quality:"Video quality", audio_quality:"MP3 bitrate", main_nav:"Main navigation", remove_chat:"Remove chat",
+        mode_label:"Mode", mode_video:"Video", mode_audio:"MP3",
+        paste_label:"Links to download",
         ext_hint:"MP3 and full YouTube — for extended access.",
         trim_hint:"Trim: add a time range at the end, e.g. 0:10-0:30. YouTube playlists download in full (up to the limit).",
-        dl_btn:"DOWNLOAD ↓", recent_title:"Recent downloads", refresh:"↻ Refresh",
+        dl_btn:"Download ↓", recent_title:"Recent downloads", refresh:"↻ Refresh",
         quality_label:"Quality / bitrate", q_auto:"Auto", abr_auto:"MP3: best",
         quality_hint:"Quality applies to video, bitrate to MP3. If the exact quality is missing, the closest lower one is used.",
         checking:"Checking…", nope:"Couldn't fetch info",
@@ -535,9 +699,76 @@
     function applyI18n() {
       document.documentElement.lang = LANG;
       const _ls = document.getElementById("lang-sel"); if (_ls) _ls.value = LANG;
-      document.querySelectorAll("[data-i18n]").forEach(el => { el.textContent = tr(el.dataset.i18n); });
+      document.querySelectorAll("[data-i18n]").forEach(el => {
+        // Keep nested supporting labels while translating the parent label.
+        el.replaceChildren(document.createTextNode(tr(el.dataset.i18n)), ...Array.from(el.children));
+      });
+      document.querySelectorAll("[data-i18n-aria]").forEach(el => el.setAttribute("aria-label", tr(el.dataset.i18nAria)));
+      document.querySelectorAll("[data-i18n-supporting]").forEach(el => { el.supportingText = tr(el.dataset.i18nSupporting); });
+      document.querySelectorAll("md-outlined-select").forEach(el => { const opt = el.selectedOptions[0]; if (opt) el.displayText = opt.textContent.trim(); });
+      syncControls();
       document.querySelectorAll("[data-i18n-ph]").forEach(el => { el.placeholder = tr(el.dataset.i18nPh); });
     }
+
+
+    // Material controls expose native keyboard behavior through Shadow DOM.
+    function syncControls() {
+      document.querySelectorAll(".mode, .opt").forEach(el => { el.selected = el.classList.contains("active") || el.classList.contains("on"); });
+      document.querySelectorAll(".nav").forEach(el => {
+        if (el.classList.contains("active")) el.setAttribute("aria-current", "page");
+        else el.removeAttribute("aria-current");
+        el.setAttribute("aria-controls", "page-" + el.dataset.page);
+      });
+      document.querySelectorAll(".tun").forEach(row => {
+        const label = row.querySelector("label"), input = row.querySelector("md-outlined-text-field");
+        if (label && input) { label.htmlFor = input.id; input.setAttribute("aria-label", label.textContent.trim()); }
+      });
+      document.querySelectorAll("md-switch").forEach(el => {
+        const label = el.closest(".row")?.firstElementChild;
+        if (label) el.setAttribute("aria-label", label.textContent.trim());
+      });
+      document.querySelectorAll(".seg, .modes").forEach((group, i) => {
+        const label = group.closest(".row")?.firstElementChild || group.parentElement.querySelector("label");
+        if (label && label !== group) {
+          if (!label.id) label.id = "choice-label-" + i;
+          group.setAttribute("role", "group");
+          group.setAttribute("aria-labelledby", label.id);
+        }
+      });
+    }
+    document.querySelector('label[data-i18n="lang_label"]').htmlFor = "lang-sel";
+    document.querySelector('label[data-i18n="add_chat"]').htmlFor = "acc-ident";
+    ["beh-status", "bk-status", "tun-status", "cache-status"].forEach(id => document.getElementById(id).setAttribute("role", "status"));
+
+    // Auto follows Telegram inside the host, and the OS in an ordinary browser.
+    const themeSelect = document.getElementById("theme-sel");
+    const systemTheme = window.matchMedia("(prefers-color-scheme: dark)");
+    let themePreference = "auto";
+    try { const saved = localStorage.getItem("sdp-theme"); if (["auto", "light", "dark"].includes(saved)) themePreference = saved; } catch (_) {}
+    themeSelect.value = themePreference;
+    function applyTheme() {
+      const theme = themePreference === "auto"
+        ? (initData && tg?.colorScheme ? tg.colorScheme : (systemTheme.matches ? "dark" : "light"))
+        : themePreference;
+      document.documentElement.dataset.theme = theme;
+      if (initData && tg?.isVersionAtLeast?.("6.1")) {
+        const colors = getComputedStyle(document.documentElement);
+        try {
+          tg.setHeaderColor?.(tg.isVersionAtLeast("6.9") ? colors.getPropertyValue("--md-sys-color-surface").trim() : "bg_color");
+          tg.setBackgroundColor?.(colors.getPropertyValue("--md-sys-color-surface").trim());
+          if (tg.isVersionAtLeast("7.10")) tg.setBottomBarColor?.(colors.getPropertyValue("--md-sys-color-surface-container").trim());
+        } catch (_) { /* Older Telegram clients may not support host colors. */ }
+      }
+    }
+    themeSelect.addEventListener("change", () => {
+      themePreference = themeSelect.value;
+      try { localStorage.setItem("sdp-theme", themePreference); } catch (_) {}
+      applyTheme();
+    });
+    systemTheme.addEventListener("change", applyTheme);
+    tg?.onEvent?.("themeChanged", applyTheme);
+    applyTheme();
+    syncControls();
 
     function redrawAll() {
       // applyI18n() чіпає лише [data-i18n]. Усе, що малюється в JS — картка
@@ -629,6 +860,7 @@
       document.querySelectorAll(".page").forEach(x => x.classList.remove("active"));
       n.classList.add("active");
       document.getElementById("page-" + n.dataset.page).classList.add("active");
+      syncControls();
       window.scrollTo(0, 0);
       if (n.dataset.page === "activity") { loadActivity(); startProg(); } else { stopProg(); }
       if (n.dataset.page === "stats") loadStats();
@@ -639,7 +871,7 @@
     let mode = "video";
     document.querySelectorAll(".mode").forEach(el => el.addEventListener("click", () => {
       document.querySelectorAll(".mode").forEach(m => m.classList.remove("active"));
-      el.classList.add("active"); mode = el.dataset.mode;
+      el.classList.add("active"); mode = el.dataset.mode; syncControls();
     }));
     const statusEl = document.getElementById("status"), goBtn = document.getElementById("go");
     const setStatus = (msg, c) => { statusEl.textContent = msg; statusEl.className = c || ""; };
@@ -680,6 +912,7 @@
       document.getElementById("preview-inline").innerHTML = html;
     }
     async function autoPreview() {
+      if (localPreview) return;
       const raw = urlBox.value.trim();
       const m = raw.match(/https?:\/\/\S+/);
       if (!m) { previewFor = ""; renderPreview(""); return; }
@@ -707,6 +940,7 @@
       previewTimer = setTimeout(autoPreview, 250);
     });
     async function redo(url) {
+      if (!initData) return setStatus(tr("open_via_bot"), "err");
       const r = await fetch("/api/download", { method:"POST", headers:{"Content-Type":"application/json"},
         body: JSON.stringify({ initData, url, mode: "video" }) });
       const d = await r.json();
@@ -718,11 +952,13 @@
     }
     window.redo = redo;
     async function apiGet(p) {
+      if (localPreview) return { ok: false };
       const r = await fetch(p, { headers: { "X-Telegram-Init-Data": initData } });
       if (r.status === 403) return { forbidden: true };
       return r.json();
     }
     async function apiPost(p, body) {
+      if (!initData) return { ok: false, forbidden: true };
       const r = await fetch(p, { method:"POST", headers:{ "Content-Type":"application/json", "X-Telegram-Init-Data": initData },
         body: JSON.stringify(body) });
       if (r.status === 403) return { forbidden: true };
@@ -759,7 +995,7 @@
         if (j.status === "downloading") {
           const pct = j.pct != null ? j.pct : 0;
           right = `<div class="st go">${Math.round(pct)}%</div>`;
-          bar = `<div class="bar-bg"><div class="bar-fill" style="width:${pct}%"></div></div>`;
+          bar = `<md-linear-progress value="${pct/100}" aria-label="${esc(lbl(j.source))}"></md-linear-progress>`;
           const parts = [];
           if (j.eta != null) parts.push(tr("eta") + " " + fmtEta(j.eta));
           if (j.speed) parts.push(fmtSpeed(j.speed));
@@ -767,7 +1003,7 @@
         } else if (j.status === "queued") {
           right = `<div class="st go">${tr("st_queued")}</div>`;
         } else if (j.status === "done") {
-          right = `<div class="st ok">${tr("done")}</div>`; bar = `<div class="bar-bg"><div class="bar-fill" style="width:100%"></div></div>`;
+          right = `<div class="st ok">${tr("done")}</div>`; bar = `<md-linear-progress value="1" aria-label="${esc(tr("done"))}"></md-linear-progress>`;
         } else if (j.status === "toobig") {
           right = `<div class="st err">${tr("st_toobig")}</div>`;
         } else {
@@ -798,7 +1034,7 @@
           </div>
           <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px">
             <div class="st ${ok?"ok":"err"}">${ok?tr("done"):tr("failed")}</div>
-            ${e.url ? `<button class="redo" data-redo="${esc(e.url)}">${tr("redo")}</button>` : ""}
+            ${e.url ? `<md-filled-tonal-button class="redo" data-redo="${esc(e.url)}">${tr("redo")}</md-filled-tonal-button>` : ""}
           </div>
         </div>`;
       }).join("");
@@ -827,20 +1063,31 @@
     }
 
     // ---- settings ----
+    function setSettingsError(failed) {
+      const status = document.getElementById("settings-status");
+      if (failed) {
+        status.dataset.i18n = "no_contact";
+        status.textContent = tr("no_contact");
+      } else {
+        delete status.dataset.i18n;
+        status.textContent = "";
+      }
+    }
     document.getElementById("lang-sel").addEventListener("change", async (e) => {
       LANG = e.target.value;
       applyI18n();
       await apiPost("/api/settings", { lang: LANG });
       redrawAll();
     });
-    document.querySelectorAll("[data-wl]").forEach(o => o.addEventListener("click", async () => {
-      await apiPost("/api/settings", { whitelist: o.dataset.wl }); loadSettings();
-    }));
-    document.querySelectorAll("[data-notify]").forEach(o => o.addEventListener("click", async () => {
-      await apiPost("/api/settings", { notify_no_access: o.dataset.notify }); loadSettings();
-    }));
-    document.querySelectorAll("[data-cache]").forEach(o => o.addEventListener("click", async () => {
-      await apiPost("/api/settings", { cache: o.dataset.cache }); loadSettings();
+    document.querySelectorAll("[data-setting]").forEach(control => control.addEventListener("change", async () => {
+      const previous = !control.selected;
+      control.disabled = true;
+      const result = await apiPost("/api/settings", { [control.dataset.setting]: control.selected ? "1" : "0" }).catch(() => ({ ok: false }));
+      if (!result.ok) {
+        control.selected = previous;
+      }
+      setSettingsError(!result.ok);
+      control.disabled = false;
     }));
     function renderCookies(info) {
       const box = document.getElementById("ck-box");
@@ -852,7 +1099,7 @@
         return;
       }
       const map = { ok:["var(--green)", tr("ck_on")],
-                    soon:["#e0b02f", tr("ck_soon")],
+                    soon:["var(--warning)", tr("ck_soon")],
                     expired:["var(--orange)", tr("ck_dead")] };
       const [color, label] = map[info.state] || map.ok;
       const left = info.days === null || info.days === undefined
@@ -893,23 +1140,17 @@
     document.querySelectorAll("[data-titles]").forEach(o => o.addEventListener("click", async () => {
       await apiPost("/api/settings", { titles_mode: o.dataset.titles }); loadSettings();
     }));
-    document.querySelectorAll("[data-audiotoo]").forEach(o => o.addEventListener("click", async () => {
-      await apiPost("/api/settings", { audio_too: o.dataset.audiotoo }); loadSettings();
-    }));
     const TUN_KEYS = ["max_links","max_per_user","chat_interval","flood_retries",
                       "job_retries","job_retry_delay","cobalt_retries","cobalt_retry_delay",
                       "max_concurrent","frag_concurrency","check_minutes"];
     const BEH_KEYS = ["max_height","long_max_height","long_min_height",
                       "playlist_max","long_job_notify","cache_max","cache_clear_days"];
-    document.querySelectorAll("[data-flag]").forEach(o => o.addEventListener("click", async () => {
-      const body = {}; body[o.dataset.flag] = o.dataset.val;
-      await apiPost("/api/settings", body); loadSettings();
-    }));
     function fold(btn, list, arrow) {
       document.getElementById(btn).addEventListener("click", () => {
         const box = document.getElementById(list);
         const open = box.style.display === "none";
         box.style.display = open ? "block" : "none";
+        document.getElementById(btn).setAttribute("aria-expanded", String(open));
         document.getElementById(arrow).textContent = open ? "\u25B4" : "\u25BE";
       });
     }
@@ -955,6 +1196,7 @@
       const box = document.getElementById("tun-list");
       const open = box.style.display === "none";
       box.style.display = open ? "block" : "none";
+      document.getElementById("tun-toggle").setAttribute("aria-expanded", String(open));
       document.getElementById("tun-arrow").textContent = open ? "\u25B4" : "\u25BE";
     });
     document.getElementById("tun-save").addEventListener("click", () => saveNums(TUN_KEYS, "tun-status"));
@@ -962,6 +1204,7 @@
       const box = document.getElementById("svc-list");
       const open = box.style.display === "none";
       box.style.display = open ? "block" : "none";
+      document.getElementById("svc-toggle").setAttribute("aria-expanded", String(open));
       document.getElementById("svc-arrow").textContent = open ? "\u25B4" : "\u25BE";
       if (open) loadServices();
     });
@@ -973,17 +1216,18 @@
       box.innerHTML = d.services.map(s => {
         const tier = s.tier === "extended" ? tr("extended") : tr("basic");
         return `<div class="row" style="border-top:1px solid var(--line)">
-          <div><div style="font-weight:600">${s.label}</div><div class="muted">${tier}</div></div>
-          <div class="seg" style="width:110px">
-            <div class="opt ${s.enabled?"on":""}" data-svc="${s.id}" data-val="1">${tr("yes")}</div>
-            <div class="opt ${s.enabled?"":"on"}" data-svc="${s.id}" data-val="0">${tr("no")}</div>
-          </div></div>`;
+          <div><div style="font-weight:600">${esc(s.label)}</div><div class="muted">${tier}</div></div>
+          <md-switch icons data-svc="${esc(s.id)}" aria-label="${esc(s.label)}" ${s.enabled?"selected":""}></md-switch></div>`;
       }).join("");
+      syncControls();
     }
-    document.getElementById("svc-list").addEventListener("click", async e => {
+    document.getElementById("svc-list").addEventListener("change", async e => {
       const o = e.target.closest("[data-svc]"); if (!o) return;
-      await apiPost("/api/settings", { ["svc:" + o.dataset.svc]: o.dataset.val });
-      loadServices();
+      o.disabled = true;
+      const r = await apiPost("/api/settings", { ["svc:" + o.dataset.svc]: o.selected ? "1" : "0" }).catch(() => ({ ok: false }));
+      if (!r.ok) o.selected = !o.selected;
+      setSettingsError(!r.ok);
+      o.disabled = false;
     });
     document.getElementById("acc-add").addEventListener("click", async () => {
       const el = document.getElementById("acc-ident");
@@ -1018,12 +1262,8 @@
       const st = s.settings;
       if (st.lang && st.lang !== LANG) { LANG = st.lang; applyI18n(); }
       const _ls2 = document.getElementById("lang-sel"); if (_ls2) _ls2.value = LANG;
-      document.querySelectorAll("[data-wl]").forEach(o => o.classList.toggle("on", o.dataset.wl === (st.whitelist || "0")));
-      document.querySelectorAll("[data-notify]").forEach(o => o.classList.toggle("on", o.dataset.notify === st.notify_no_access));
-      document.querySelectorAll("[data-cache]").forEach(o => o.classList.toggle("on", o.dataset.cache === st.cache));
       document.querySelectorAll("[data-eng]").forEach(o => o.classList.toggle("on", o.dataset.eng === (st.engine_pref || "auto")));
       document.querySelectorAll("[data-titles]").forEach(o => o.classList.toggle("on", o.dataset.titles === (st.titles_mode || "private")));
-      document.querySelectorAll("[data-audiotoo]").forEach(o => o.classList.toggle("on", o.dataset.audiotoo === (st.audio_too || "0")));
       renderCookies(st.cookies_info);
       if (st.tunables && st.tunables.cookies_warn_days !== undefined) {
         const w = document.getElementById("t-cookies_warn_days");
@@ -1041,15 +1281,16 @@
           : tr("cache_empty");
       }
       const fl = st.flags || {};
-      document.querySelectorAll("[data-flag]").forEach(o => {
-        o.classList.toggle("on", o.dataset.val === (fl[o.dataset.flag] || "0"));
+      document.querySelectorAll("[data-setting]").forEach(o => {
+        if (!o.disabled) o.selected = String((o.hasAttribute("data-setting-flag") ? fl : st)[o.dataset.setting] || "0") === "1";
       });
+      syncControls();
       const a = await apiGet("/api/access");
       const box = document.getElementById("acc-list");
       if (!a.ok || !a.access.length) { box.innerHTML = `<div class="empty">${tr("empty_list")}</div>`; return; }
       box.innerHTML = a.access.map(r => `<div class="row" style="border-top:1px solid var(--line)">
         <div><div style="font-weight:600">${esc(r.label || tr("chat_w"))}</div><div class="muted">${esc(r.ident)}</div></div>
-        <button class="sm del" data-del="${esc(r.ident)}">✕</button>
+        <md-filled-tonal-button class="sm del" aria-label="${esc(tr("remove_chat") + ": " + (r.label || r.ident))}" data-del="${esc(r.ident)}">✕</md-filled-tonal-button>
         </div>`).join("");
     }
 
@@ -1057,6 +1298,17 @@
     (async () => {
       try { const d = await apiGet("/api/lang"); if (d.ok && d.lang) LANG = d.lang; } catch (e) {}
       applyI18n();
+      if (localPreview) {
+        document.getElementById("local-preview-note").hidden = false;
+        document.querySelectorAll('#settings-body md-switch, #settings-body md-filter-chip, #settings-body md-outlined-text-field, #settings-body md-filled-tonal-button').forEach(el => { el.disabled = true; });
+        ["ck-box", "by-source", "by-chat", "acc-list"].forEach(id => {
+          const el = document.getElementById(id);
+          el.dataset.i18n = "no_data";
+          el.textContent = tr("no_data");
+        });
+      }
+      document.documentElement.dataset.ready = "true";
+    })();
     })();
   </script>
 </body>

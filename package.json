@@ -1,0 +1,8 @@
+{
+  "name": "sdp-miniapp",
+  "version": "1.4.0",
+  "private": true,
+  "scripts": { "build": "node frontend/build.mjs" },
+  "dependencies": { "@material/web": "2.5.0" },
+  "devDependencies": { "esbuild": "0.28.2" }
+}
