@@ -1,6 +1,6 @@
 {
   "name": "sdp-miniapp",
-  "version": "4.2.0",
+  "version": "1.4.2",
   "private": true,
   "scripts": {
     "build": "node frontend/build.mjs",
