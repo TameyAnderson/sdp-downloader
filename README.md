@@ -238,6 +238,13 @@ validates the file, stores it with `600` permissions and deletes your message.
 The panel shows the state: days left, which keys, when it was updated. The bot
 reminds you in advance. In Lite the file is only mounted from the host.
 
+Cookie upload dates now live in the persistent database, not in file timestamps.
+Restarting/redeploying or uploading identical content does not reset the date.
+For pre-existing files without metadata the date is unknown. The countdown is
+an estimate from authentication-cookie expiry fields, not proof of a valid login.
+Each yt-dlp process uses a private disposable cookie copy and cannot rewrite the
+uploaded source file. Deleting cookies also clears the Cobalt export.
+
 > **A cookies file is a key to the account**: it logs in without a password or
 > 2FA. Use a **separate** account, never your main one, and never commit that
 > file — `.gitignore` already covers every common name.

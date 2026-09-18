@@ -4,6 +4,30 @@
 
 The full path a link takes: from the message to the finished file.
 
+## Persistent jobs and operational limits
+
+Full mode stores jobs and cookie upload fingerprints in SQLite on `/data`.
+Keep that volume across redeploys. Interrupted jobs require manual retry;
+the bot never blindly resends after restart. Cookie expiry is an estimate,
+not an online session-health check.
+
+New job API contracts live in [frontend/openapi.json](frontend/openapi.json).
+History uses signed Telegram initData and private ownership checks. Pass both
+`before=next_before` and `before_id=next_before_id` for pagination.
+Retrying an uncertain delivery requires `confirm_duplicate_risk: true`.
+New history does not import legacy statistics, and its UI is deferred.
+
+`SDP_QUEUE_LIMIT=100`, `SDP_USER_QUEUE_LIMIT=10`, `SDP_HISTORY_LIMIT=100`,
+`SDP_FFMPEG_CONCURRENCY=2` and `SDP_DISK_RESERVE_MB=64` bound resource use.
+Failed single-file uploads can be retained for `SDP_RETENTION_SECONDS=3600`
+under a total `SDP_RETENTION_MAX_MB=512` cap; zero retention disables this.
+Albums are not retained. Disk admission reservations are not file-size guarantees.
+
+Runtime dependencies are pinned in `requirements.lock`; `uv.lock` includes
+development tools. CI checks tests, browser fixtures, contracts and known
+dependency vulnerabilities before releasing. Rebuild images to update dependencies;
+automatic yt-dlp upgrades at startup are disabled by default.
+
 ---
 
 ## 1. Entry points

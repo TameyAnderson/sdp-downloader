@@ -139,6 +139,8 @@ class TestRepoIsClean(unittest.TestCase):
     ALLOWED_ROOT = {
         "bot.py", "index.html", "requirements.txt", "Dockerfile", "entrypoint.sh",
         "package.json", "package-lock.json",  # Material Web build and pinned dependencies
+        "pyproject.toml", "uv.lock", ".pre-commit-config.yaml",
+        "requirements.lock",
         "docker-compose.yml", "docker-compose.lite.yml",
         ".env.example", ".env.lite.example", ".gitignore", ".dockerignore",
         "LICENSE", "README.md", "README.uk.md",

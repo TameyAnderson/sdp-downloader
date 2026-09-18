@@ -33,7 +33,10 @@ env:
   REGISTRY: ghcr.io
 
 jobs:
+  validate:
+    uses: ./.github/workflows/ci.yml
   build:
+    needs: validate
     name: Build and push
     runs-on: ubuntu-latest
     timeout-minutes: 40

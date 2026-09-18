@@ -6,7 +6,7 @@ from pathlib import Path
 
 import yaml
 
-from helper import ROOT, read
+from helper import ROOT, read, load_bot
 
 COMPOSE = ("docker-compose.yml", "docker-compose.lite.yml")
 
@@ -48,6 +48,7 @@ class TestCompose(unittest.TestCase):
         known |= secrets | {s + "_FILE" for s in secrets}
         known |= {"ENABLE_" + s.upper() for s in re.findall(r'^    "(\w+)": \{', src, re.M)}
         known |= {"YTDLP_CHANNEL", "AUTO_UPGRADE_YTDLP"}          # read by entrypoint.sh
+        known |= {"SDP_" + name.upper() for name in load_bot().RuntimeSettings.model_fields}
         for f in COMPOSE:
             env = load(f)["services"]["video-bot"]["environment"]
             unused = sorted(k for k in env if k not in known)
@@ -111,7 +112,8 @@ class TestSecrets(unittest.TestCase):
     def test_no_secrets_in_tracked_files(self):
         bad = []
         for path in ROOT.rglob("*"):
-            if not path.is_file() or ".git" in path.parts:
+            if not path.is_file() or any(p in path.parts for p in (
+                    ".git", ".venv", ".venv312", "node_modules", ".hypothesis", ".pytest_cache")):
                 continue
             if path.suffix.lower() in (".png", ".jpg", ".mp4", ".db", ".pyc"):
                 continue

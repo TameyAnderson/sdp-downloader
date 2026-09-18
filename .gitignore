@@ -33,6 +33,12 @@ static/material.js
 __pycache__/
 *.py[cod]
 .venv/
+.venv312/
+.coverage*
+coverage.xml
+htmlcov/
+.hypothesis/
+.ruff_cache/
 venv/
 *.egg-info/
 

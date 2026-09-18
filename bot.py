@@ -24,6 +24,7 @@ import io
 import ipaddress
 import json
 import logging
+import math
 import os
 import re
 import shutil
@@ -34,7 +35,9 @@ import tempfile
 import threading
 import time
 import uuid
+from enum import StrEnum
 from functools import lru_cache
+from contextlib import asynccontextmanager
 from http.cookiejar import LoadError, MozillaCookieJar
 from importlib.metadata import PackageNotFoundError, version as pkg_version
 from pathlib import Path
@@ -42,13 +45,16 @@ from urllib.parse import parse_qsl, urlsplit
 from urllib.request import Request
 
 import aiohttp
+import aiosqlite
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from aiohttp import web
 from aiogram import Bot, Dispatcher, F
 from aiogram.client.default import DefaultBotProperties
 from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.client.telegram import TelegramAPIServer
 from aiogram.enums import ChatAction, ChatMemberStatus, ChatType
-from aiogram.exceptions import TelegramRetryAfter
+from aiogram.exceptions import TelegramRetryAfter, TelegramBadRequest, TelegramForbiddenError
 from aiogram.filters import Command
 from aiogram.types import (
     CallbackQuery,
@@ -65,6 +71,128 @@ from aiogram.utils.chat_action import ChatActionSender
 # ----------------------------------------------------------------------------
 # Config
 # ----------------------------------------------------------------------------
+
+class RuntimeSettings(BaseSettings):
+    """New operational limits, validated once without loading or logging secrets."""
+    model_config = SettingsConfigDict(env_prefix="SDP_", extra="ignore")
+    queue_limit: int = Field(default=100, ge=1, le=10000)
+    user_queue_limit: int = Field(default=10, ge=1, le=1000)
+    history_limit: int = Field(default=100, ge=1, le=500)
+    ffmpeg_concurrency: int = Field(default=2, ge=1, le=32)
+    retention_seconds: int = Field(default=3600, ge=0, le=86400)
+    retention_max_mb: int = Field(default=512, ge=0, le=10240)
+    disk_reserve_mb: int = Field(default=64, ge=0, le=4096)
+
+
+RUNTIME = RuntimeSettings()
+
+
+class DownloadRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    initData: str = Field(default="", max_length=16384)
+    url: str = Field(min_length=1, max_length=32768)
+    mode: str = Field(default="video", pattern="^(video|audio)$")
+    quality: int | None = Field(default=None, ge=0, le=4320)
+    abr: int | None = Field(default=None, ge=0, le=320)
+
+    @field_validator("quality", "abr", mode="before")
+    @classmethod
+    def auto_value(cls, value):
+        return None if value == "" else value
+
+
+class FailureKind(StrEnum):
+    AUTH = "auth_required"
+    UNAVAILABLE = "unavailable"
+    RATE_LIMIT = "rate_limited"
+    NETWORK = "network"
+    EXTRACTOR = "extractor"
+    RESOURCE = "resource"
+    UNKNOWN = "unknown"
+
+
+class FailureInfo(BaseModel):
+    kind: FailureKind
+    message_key: str
+    retryable: bool
+
+
+class JobView(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    id: str
+    user_id: int | None
+    chat_id: int | None
+    ts: float
+    updated: float
+    source: str
+    mode: str
+    status: str
+    pct: float | None = None
+    url: str | None = None
+    failure: FailureInfo | None = None
+
+
+class HistoryResponse(BaseModel):
+    ok: bool
+    jobs: list[JobView]
+    next_before: float | None
+    next_before_id: str | None
+
+
+class DownloadResponse(BaseModel):
+    ok: bool
+    queued: int
+    job_ids: list[str]
+
+
+def jobs_openapi():
+    """Contract for the new jobs API; legacy admin endpoints are not covered yet."""
+    schemas = {}
+    for model in (DownloadRequest, DownloadResponse, HistoryResponse):
+        schema = model.model_json_schema(ref_template="#/components/schemas/{model}")
+        schemas.update(schema.pop("$defs", {}))
+        schemas[model.__name__] = schema
+    def response(model):
+        return {"description": "Success", "content": {"application/json": {
+            "schema": {"$ref": "#/components/schemas/" + model}}}}
+    paths = {
+        "/api/download": {"post": {
+            "description": "initData authentication is supplied in the JSON body.",
+            "requestBody": {"required": True, "content": {"application/json": {
+                "schema": {"$ref": "#/components/schemas/DownloadRequest"}}}},
+            "responses": {"200": response("DownloadResponse"),
+                          "400": {"description": "Invalid request"},
+                          "403": {"description": "Authentication or access denied"},
+                          "429": {"description": "Queue or request limit"}}}},
+        "/api/history": {"get": {
+            "security": [{"telegramInitData": []}],
+            "parameters": [{"in": "query", "name": key, "schema": schema}
+                           for key, schema in (("limit", {"type": "integer", "minimum": 1}),
+                                               ("before", {"type": "number"}),
+                                               ("before_id", {"type": "string"}),
+                                               ("status", {"type": "string"}),
+                                               ("q", {"type": "string"}))],
+            "responses": {"200": response("HistoryResponse"),
+                          "400": {"description": "Invalid cursor"},
+                          "403": {"description": "Authentication or access denied"}}}},
+    }
+    for action in ("cancel", "retry"):
+        paths["/api/jobs/{job_id}/" + action] = {"post": {
+            "security": [{"telegramInitData": []}],
+            "parameters": [{"in": "path", "name": "job_id", "required": True,
+                            "schema": {"type": "string"}}],
+            "responses": {"202": {"description": "Action accepted"},
+                          "403": {"description": "Authentication or access denied"},
+                          "404": {"description": "No accessible job"},
+                          "409": {"description": "Job state does not allow this action"},
+                          "429": {"description": "Queue or request limit"}}}}
+    paths["/api/jobs/{job_id}/retry"]["post"]["requestBody"] = {
+        "description": "Explicit acknowledgement when a previous delivery may have succeeded.",
+        "content": {"application/json": {"schema": {"type": "object", "properties": {
+            "confirm_duplicate_risk": {"type": "boolean", "default": False}}}}}}
+    return {"openapi": "3.1.0", "info": {"title": "SDP Jobs API", "version": "1.0.0"},
+            "paths": paths, "components": {"schemas": schemas, "securitySchemes": {
+                "telegramInitData": {"type": "apiKey", "in": "header", "name": "X-Telegram-Init-Data"}}}}
 
 def env_secret(name, default=""):
     """Read a secret from <NAME>_FILE if it is set, otherwise from <NAME>.
@@ -525,6 +653,7 @@ class Limiter:
 
 
 download_semaphore = Limiter("max_concurrent")
+_media_gate = asyncio.Semaphore(RUNTIME.ffmpeg_concurrency)
 _user_sems = {}          # user_id -> Limiter (parallel downloads per user)
 _chat_last_send = {}     # chat_id -> monotonic timestamp of the last send
 _chat_send_lock = {}     # chat_id -> asyncio.Lock
@@ -655,12 +784,15 @@ T = {
         "bot_started": "✅ s.d.p працює\n\nВерсії:\n{r}",
         "lite_private": ("Я працюю в групах. Додай мене в чат — і я качатиму звідти\nкороткі відео з посилань."),
         "err_timeout": "час очікування вичерпано.",
+        "err_rate": "⏳ Сервіс тимчасово обмежив запити. Спробуй пізніше.",
+        "err_network": "⚠️ Тимчасова мережева помилка. Спробуй пізніше.",
         "err_internal": "внутрішня помилка: {err}",
         "err_download": "не вдалося завантажити за цим посиланням.",
         "err_nofile": "файл не знайдено після завантаження.",
         "rep_version": "\U0001f534 нова версія: {sha} — {msg}",
         "rep_lib": "\U0001f534 {name}: {cur} \u2192 {latest} (є оновлення)",
-        "rep_ck_forever": "\U0001f7e2 cookies: без терміну дії",
+        "rep_ck_forever": "⚪ cookies: строк не вказаний; авторизацію не перевірено",
+        "queue_full": "⏳ Черга заповнена. Спробуй після завершення поточних завдань.",
         "rep_ck_expired": "\U0001f534 cookies: ПРОТЕРМІНОВАНІ",
         "rep_ck_soon": "\U0001f7e1 cookies: лишилось ~{days} дн.",
         "rep_ck_ok": "\U0001f7e2 cookies: ще ~{days} дн.",
@@ -738,12 +870,15 @@ T = {
         "bot_started": "✅ s.d.p is running\n\nVersions:\n{r}",
         "lite_private": ("I work in groups. Add me to a chat and I will grab\nshort videos from the links posted there."),
         "err_timeout": "timed out.",
+        "err_rate": "⏳ The service is limiting requests. Try again later.",
+        "err_network": "⚠️ Temporary network error. Try again later.",
         "err_internal": "internal error: {err}",
         "err_download": "could not download from this link.",
         "err_nofile": "no file found after the download.",
         "rep_version": "\U0001f534 new version: {sha} — {msg}",
         "rep_lib": "\U0001f534 {name}: {cur} \u2192 {latest} (update available)",
-        "rep_ck_forever": "\U0001f7e2 cookies: no expiry date",
+        "rep_ck_forever": "⚪ cookies: expiry unspecified; authentication not verified",
+        "queue_full": "⏳ Queue is full. Try again after current jobs finish.",
         "rep_ck_expired": "\U0001f534 cookies: EXPIRED",
         "rep_ck_soon": "\U0001f7e1 cookies: ~{days} days left",
         "rep_ck_ok": "\U0001f7e2 cookies: ~{days} days left",
@@ -848,6 +983,19 @@ def _extract_trim(text, urls=()):
         return (a, b)
     return None
 _progress = {}  # job_id -> dict
+_job_tasks = {}  # job_id -> isolated task; cancellation never cancels a whole batch
+_disk_reservations = {}
+
+
+def reserve_job_disk(job):
+    """Conservative admission budget, not a claim to know an unknown video's size."""
+    available = free_space()
+    reserve = max(RUNTIME.disk_reserve_mb * 1024 * 1024,
+                  int((job.get("retained_from") or {}).get("size", 0)))
+    if available is not None and available - sum(_disk_reservations.values()) < MIN_FREE_SPACE + reserve:
+        return False
+    _disk_reservations[job["id"]] = reserve
+    return True
 PROGRESS_TEMPLATE = ("download:JBP %(progress.downloaded_bytes)s "
                      "%(progress.total_bytes)s %(progress.total_bytes_estimate)s "
                      "%(progress.eta)s %(progress.speed)s")
@@ -881,7 +1029,7 @@ def _new_job(message, source, mode):
 def _num(x):
     try:
         v = float(x)
-        return v if v == v else None  # drop NaN
+        return v if math.isfinite(v) else None
     except (TypeError, ValueError):
         return None
 
@@ -938,6 +1086,8 @@ def _finish_job(job, status):
         job["pct"] = 100.0
     elif status == "toobig":
         job["status"] = "toobig"
+    elif status in ("cancelled", "interrupted"):
+        job["status"] = status
     else:
         job["status"] = "error"
     job["eta"] = 0
@@ -1297,6 +1447,7 @@ async def housekeeping_loop():
         try:
             prune_state()
             await cache_flush()
+            await asyncio.to_thread(clean_retained_media)
         except Exception:  # noqa: BLE001
             logger.exception("housekeeping failed")
 
@@ -1414,7 +1565,196 @@ def _mig_3_indexes(con):
     con.execute("CREATE INDEX IF NOT EXISTS idx_events_status ON events(status)")
 
 
-MIGRATIONS = (_mig_1_base, _mig_2_whitelist, _mig_3_indexes)
+def _mig_4_cookie_metadata(con):
+    con.execute("CREATE TABLE IF NOT EXISTS cookie_metadata("
+                "fingerprint TEXT PRIMARY KEY, uploaded_at INTEGER NOT NULL)")
+
+
+def _mig_5_jobs(con):
+    con.execute("CREATE TABLE IF NOT EXISTS jobs("
+                "id TEXT PRIMARY KEY, user_id INTEGER, chat_id INTEGER, "
+                "created REAL NOT NULL, updated REAL NOT NULL, status TEXT NOT NULL, "
+                "payload TEXT NOT NULL)")
+    con.execute("CREATE INDEX IF NOT EXISTS idx_jobs_owner ON jobs(user_id, created)")
+
+
+MIGRATIONS = (_mig_1_base, _mig_2_whitelist, _mig_3_indexes, _mig_4_cookie_metadata,
+              _mig_5_jobs)
+
+
+async def save_job(job):
+    await save_jobs([job])
+
+
+async def save_jobs(jobs):
+    if LITE:
+        return
+    rows = [(job["id"], job["user_id"], job["chat_id"], job["ts"], job["updated"],
+             job["status"], json.dumps(job, ensure_ascii=False, allow_nan=False)) for job in jobs]
+    async with aiosqlite.connect(STATS_DB, timeout=10) as con:
+        await con.executemany(
+            "INSERT INTO jobs VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET "
+            "updated=excluded.updated,status=excluded.status,payload=excluded.payload "
+            "WHERE excluded.updated>=jobs.updated",
+            rows)
+        await con.commit()
+
+
+async def job_history(uid, admin=False, limit=50, before=None, status=None, search="", before_id=None):
+    clauses, params = [], []
+    if not admin:
+        # Group activity is not automatically exposed in a personal Mini App.
+        clauses.append("user_id=? AND chat_id=?")
+        params.extend((uid, uid))
+    if before is not None:
+        if before_id:
+            clauses.append("(created<? OR (created=? AND id<?))")
+            params.extend((before, before, before_id))
+        else:
+            clauses.append("created<?")
+            params.append(before)
+    if status:
+        clauses.append("status=?")
+        params.append(status)
+    if search:
+        clauses.append("json_extract(payload,'$.url') LIKE ? ESCAPE '\\'")
+        params.append("%" + search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%")
+    where = " WHERE " + " AND ".join(clauses) if clauses else ""
+    async with aiosqlite.connect(STATS_DB, timeout=10) as con:
+        cursor = await con.execute("SELECT payload FROM jobs" + where +
+                                   " ORDER BY created DESC,id DESC LIMIT ?",
+                                   (*params, min(RUNTIME.history_limit, max(1, limit))))
+        return [json.loads(row[0]) for row in await cursor.fetchall()]
+
+
+async def recover_jobs():
+    """Never blindly resend after a crash: delivery may already have happened."""
+    if LITE:
+        return
+    async with aiosqlite.connect(STATS_DB, timeout=10) as con:
+        cursor = await con.execute("SELECT payload FROM jobs WHERE status NOT IN "
+                                   "('done','error','toobig','cancelled','interrupted')")
+        for row in await cursor.fetchall():
+            job = json.loads(row[0])
+            job["interrupted_stage"] = job["status"]
+            job["delivery_uncertain"] = job["status"] == "sending"
+            job.update(status="interrupted", updated=time.time(), eta=None, speed=None)
+            await con.execute("UPDATE jobs SET status=?,updated=?,payload=? WHERE id=?",
+                              (job["status"], job["updated"], json.dumps(job), job["id"]))
+        await con.commit()
+
+
+async def persist_progress_loop():
+    while True:
+        await asyncio.sleep(3)
+        for job in list(_progress.values()):
+            if job["id"] in _job_tasks:
+                try:
+                    await save_job(dict(job))
+                except Exception:
+                    logger.exception("Could not persist job progress")
+
+
+async def job_stage(stage):
+    job = _JOB.get()
+    if job is not None:
+        job.update(status=stage, updated=time.time())
+        await save_job(job)
+
+
+def retained_media_path(item):
+    """Only our generated basenames inside persistent storage are ever accepted."""
+    if not isinstance(item, dict):
+        return None
+    name = item.get("name", "")
+    if not isinstance(name, str) or not re.fullmatch(r"[a-f0-9]{12}\.(video|audio)", name):
+        return None
+    root = Path(STATS_DB).resolve().parent / "retained-media"
+    path = root / name
+    if path.is_symlink() or root.is_symlink() or not path.is_file():
+        return None
+    if item.get("expires", 0) <= time.time():
+        return None
+    return path
+
+
+_retention_lock = threading.Lock()
+
+
+def retain_failed_upload(path, kind, job_id):
+    """Keep a failed single-file upload briefly; bounded, private, no source fetch."""
+    if LITE or not RUNTIME.retention_seconds or not RUNTIME.retention_max_mb:
+        return None
+    if kind not in {"video", "audio"} or not re.fullmatch(r"[a-f0-9]{12}", job_id):
+        return None
+    root = Path(STATS_DB).resolve().parent / "retained-media"
+    with _retention_lock:
+        if root.is_symlink():
+            return None
+        root.mkdir(mode=0o700, exist_ok=True)
+        files = [p for p in root.iterdir() if p.is_file() and not p.is_symlink()
+                 and re.fullmatch(r"[a-f0-9]{12}\.(video|audio)", p.name)]
+        for old in files:
+            if old.stat().st_mtime + RUNTIME.retention_seconds <= time.time():
+                old.unlink(missing_ok=True)
+        size = path.stat().st_size
+        used = sum(p.stat().st_size for p in files if p.exists() and p != path)
+        if used + size > RUNTIME.retention_max_mb * 1024 * 1024:
+            return None
+        dst = root / (job_id + "." + kind)
+        shutil.move(str(path), str(dst))
+        os.chmod(dst, 0o600)
+        os.utime(dst, None)
+        return {"name": dst.name, "kind": kind, "size": size,
+                "expires": int(time.time()) + RUNTIME.retention_seconds}
+
+
+async def deliver_file(send, path, kind):
+    await job_stage("sending")
+    try:
+        return await send()
+    except Exception as exc:
+        job = _JOB.get()
+        if job is not None:
+            job["delivery_uncertain"] = not isinstance(exc, (TelegramBadRequest, TelegramForbiddenError))
+            try:
+                job["retained"] = await asyncio.to_thread(retain_failed_upload, path, kind, job["id"])
+            except Exception:
+                logger.warning("Could not retain failed upload for job %s", job["id"])
+        raise
+
+
+def clean_retained_media():
+    if LITE:
+        return
+    root = Path(STATS_DB).resolve().parent / "retained-media"
+    with _retention_lock:
+        if not root.is_dir() or root.is_symlink():
+            return
+        for path in root.iterdir():
+            if (path.is_file() and not path.is_symlink()
+                    and re.fullmatch(r"[a-f0-9]{12}\.(video|audio)", path.name)
+                    and path.stat().st_mtime + RUNTIME.retention_seconds <= time.time()):
+                path.unlink(missing_ok=True)
+
+
+async def send_retained(message, item):
+    src = retained_media_path(item)
+    if src is None:
+        raise FileNotFoundError("Retained media expired")
+    with tempfile.TemporaryDirectory(prefix="vbot_retry_", dir=WORK_DIR) as work:
+        path = Path(work) / ("media.mp3" if item["kind"] == "audio" else "media.mp4")
+        await asyncio.to_thread(shutil.copyfile, src, path)
+        if item["kind"] == "video":
+            await send_video_with_meta(message, path)
+        else:
+            await deliver_file(lambda: message.reply_audio(FSInputFile(path), disable_notification=True),
+                               path, "audio")
+        try:
+            src.unlink(missing_ok=True)
+        except OSError:
+            logger.warning("Retained upload cleanup deferred")
+        return "sent"
 
 # What every event row is written with. Used to vet a restored file before it
 # replaces the live one — see restore_backup().
@@ -1429,12 +1769,19 @@ EVENT_COLUMNS = frozenset((
 def db_migrate(con):
     """Run the steps this file has not seen yet. Returns the resulting version."""
     version = con.execute("PRAGMA user_version").fetchone()[0]
+    if version > len(MIGRATIONS):
+        raise RuntimeError("Database schema is newer than this bot; use a compatible backup")
     for number, step in enumerate(MIGRATIONS, start=1):
         if version >= number:
             continue
-        step(con)
-        con.execute("PRAGMA user_version=%d" % number)
-        con.commit()
+        try:
+            con.execute("BEGIN IMMEDIATE")
+            step(con)
+            con.execute("PRAGMA user_version=%d" % number)
+            con.commit()
+        except BaseException:
+            con.rollback()
+            raise
         logger.info("Database migrated to version %d", number)
         version = number
     return version
@@ -1446,6 +1793,15 @@ def db_init():
         return
     try:
         con = db_conn()
+        old_version = con.execute("PRAGMA user_version").fetchone()[0]
+        if 0 < old_version < len(MIGRATIONS):
+            backup_path = Path(STATS_DB + ".schema-v%d.bak" % old_version)
+            if not backup_path.exists():
+                backup = sqlite3.connect(str(backup_path))
+                try:
+                    con.backup(backup)
+                finally:
+                    backup.close()
         db_migrate(con)
         logger.info("Stats DB ready: %s (schema v%d)", STATS_DB,
                     con.execute("PRAGMA user_version").fetchone()[0])
@@ -1883,9 +2239,7 @@ async def ytdlp_playlist_entries(url):
     _with_auth(args, url)
     args.append(url)
     try:
-        proc = await asyncio.create_subprocess_exec(
-            *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
-        out, _ = await asyncio.wait_for(proc.communicate(), timeout=90)
+        out, _ = await capture_process(args, timeout=90)
         lines = out.decode("utf-8", "ignore").splitlines()
         return [ln.strip() for ln in lines
                 if ln.strip().startswith("http")][:tunable("playlist_max")]
@@ -1994,6 +2348,59 @@ def _with_auth(args, url=None):
     return args
 
 
+@asynccontextmanager
+async def managed_process(args, **kwargs):
+    """Own subprocess lifetime and isolate yt-dlp's writable cookie jar per call."""
+    proc = None
+    # Cookies and child process lifetime must end together, including cancellation.
+    with tempfile.TemporaryDirectory(prefix="vbot_process_", dir=WORK_DIR) as work:
+        args = list(args)
+        if "--cookies" in args:
+            index = args.index("--cookies") + 1
+            snapshot = Path(work) / "session.txt"
+            with snapshot.open("xb") as output:
+                os.chmod(snapshot, 0o600)
+                output.write(Path(args[index]).read_bytes())
+            args[index] = str(snapshot)
+        try:
+            media = Path(args[0]).stem.lower() in {"ffmpeg", "ffprobe"}
+            acquired = False
+            if media:
+                await _media_gate.acquire()
+                acquired = True
+            proc = await asyncio.create_subprocess_exec(
+                *args, start_new_session=(os.name != "nt"), **kwargs)
+            yield proc
+        finally:
+            try:
+                if proc is not None and proc.returncode is None:
+                    try:
+                        if os.name != "nt":
+                            os.killpg(proc.pid, signal.SIGKILL)
+                        else:
+                            proc.kill()
+                    except ProcessLookupError:
+                        pass
+                    await proc.wait()
+            finally:
+                if acquired:
+                    _media_gate.release()
+
+
+async def capture_process(args, timeout):
+    async def run():
+        async with managed_process(args, stdout=asyncio.subprocess.PIPE,
+                                   stderr=asyncio.subprocess.DEVNULL) as proc:
+            out, err = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+            if proc.returncode:
+                raise RuntimeError("Media metadata process failed")
+            return out, err
+    if Path(args[0]).stem.lower() == "yt-dlp":
+        async with download_semaphore:
+            return await run()
+    return await run()
+
+
 def _build_ytdlp_args(url, out_template, fmt):
     args = [
         "yt-dlp",
@@ -2079,6 +2486,8 @@ _FAIL_PATTERNS = (
     # відрізняти від решти, бо кожна нижча сходинка драбини впреться в ту саму
     # стіну.
     ("no_space", ("no space left on device", "errno 28", "disk quota exceeded")),
+    ("err_rate", ("http error 429", "too many requests", "rate limit exceeded")),
+    ("err_network", ("connection reset", "connection refused", "timed out", "temporary failure")),
 )
 
 # The reason for the last failure inside this job, so the final message can
@@ -2098,10 +2507,27 @@ def classify_failure(text):
 
 
 def note_failure(text):
-    key = classify_failure(text)
+    info = failure_info(text)
+    key = info.message_key
     if key != "err_download" or _FAIL_REASON.get() is None:
         _FAIL_REASON.set(key)
+        job = _JOB.get()
+        if job is not None:
+            job["failure_reason"] = key
+            job["failure"] = info.model_dump(mode="json")
     return key
+
+
+def failure_info(text):
+    key = classify_failure(text)
+    kind = {
+        "err_private": FailureKind.AUTH, "err_age": FailureKind.AUTH,
+        "err_gone": FailureKind.UNAVAILABLE, "err_geo": FailureKind.UNAVAILABLE,
+        "err_rate": FailureKind.RATE_LIMIT, "err_network": FailureKind.NETWORK,
+        "err_extractor": FailureKind.EXTRACTOR, "no_space": FailureKind.RESOURCE,
+    }.get(key, FailureKind.UNKNOWN)
+    return FailureInfo(kind=kind, message_key=key,
+                       retryable=kind in {FailureKind.RATE_LIMIT, FailureKind.NETWORK})
 
 
 async def _run_ytdlp(args, work_dir, label, url):
@@ -2119,40 +2545,38 @@ async def _run_ytdlp(args, work_dir, label, url):
         logger.info("yt-dlp %s: %s", label, url)
         stderr_buf = []
         try:
-            proc = await asyncio.create_subprocess_exec(
-                *args,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
+            async with managed_process(args, stdout=asyncio.subprocess.PIPE,
+                                       stderr=asyncio.subprocess.PIPE) as proc:
+                async def _drain_stdout():
+                    buf = b""
+                    while True:
+                        chunk = await proc.stdout.read(512)
+                        if not chunk:
+                            break
+                        buf = (buf + chunk).replace(b"\r", b"\n")
+                        while b"\n" in buf:
+                            raw, buf = buf.split(b"\n", 1)
+                            if job is not None:
+                                _update_job_progress(job, raw.decode("utf-8", "ignore"))
+                        buf = buf[-65536:]
 
-            async def _drain_stdout():
-                buf = b""
-                while True:
-                    chunk = await proc.stdout.read(512)
-                    if not chunk:
-                        break
-                    buf = (buf + chunk).replace(b"\r", b"\n")
-                    while b"\n" in buf:
-                        raw, buf = buf.split(b"\n", 1)
-                        if job is not None:
-                            _update_job_progress(job, raw.decode("utf-8", "ignore"))
+                async def _drain_stderr():
+                    while True:
+                        chunk = await proc.stderr.read(4096)
+                        if not chunk:
+                            break
+                        stderr_buf.append(chunk)
+                        if len(stderr_buf) > 16:
+                            del stderr_buf[0]
 
-            async def _drain_stderr():
-                while True:
-                    chunk = await proc.stderr.read(4096)
-                    if not chunk:
-                        break
-                    stderr_buf.append(chunk)
-
-            await asyncio.wait_for(
-                asyncio.gather(_drain_stdout(), _drain_stderr()), timeout=timeout
-            )
-            await asyncio.wait_for(proc.wait(), timeout=30)
+                await asyncio.wait_for(
+                    asyncio.gather(_drain_stdout(), _drain_stderr()), timeout=timeout
+                )
+                await asyncio.wait_for(proc.wait(), timeout=30)
+        except asyncio.CancelledError:
+            shutil.rmtree(work_dir, ignore_errors=True)
+            raise
         except asyncio.TimeoutError:
-            try:
-                proc.kill()
-            except Exception:  # noqa: BLE001
-                pass
             shutil.rmtree(work_dir, ignore_errors=True)
             return None, t("err_timeout")
         except Exception as exc:  # noqa: BLE001
@@ -2212,6 +2636,7 @@ def keep_for_soundtrack(path):
 
 async def ffmpeg_extract_mp3(src):
     """Cut an MP3 out of a local file. Returns the path or None."""
+    await job_stage("processing")
     out = src.with_name(src.stem + "-audio.mp3")
     args = ["ffmpeg", "-y", "-loglevel", "error", "-i", str(src), "-vn",
             "-acodec", "libmp3lame",
@@ -2221,10 +2646,10 @@ async def ffmpeg_extract_mp3(src):
         args += ["-metadata", "title=" + title[:120]]
     args.append(str(out))
     try:
-        proc = await asyncio.create_subprocess_exec(
-            *args, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.PIPE)
-        _, err = await asyncio.wait_for(proc.communicate(), timeout=120)
-        if out.exists() and out.stat().st_size > 0:
+        async with managed_process(args, stdout=asyncio.subprocess.DEVNULL,
+                                   stderr=asyncio.subprocess.PIPE) as proc:
+            _, err = await asyncio.wait_for(proc.communicate(), timeout=120)
+        if proc.returncode == 0 and out.exists() and out.stat().st_size > 0:
             return out
         logger.info("ffmpeg gave no audio: %s", (err or b"").decode("utf-8", "ignore")[:200])
     except Exception:  # noqa: BLE001
@@ -2259,10 +2684,7 @@ def cleanup(path):
 
 async def _ffprobe_json(path, entries):
     cmd = ["ffprobe", "-v", "error", "-show_entries", entries, "-of", "json", str(path)]
-    proc = await asyncio.create_subprocess_exec(
-        *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL
-    )
-    out, _ = await asyncio.wait_for(proc.communicate(), timeout=30)
+    out, _ = await capture_process(cmd, timeout=30)
     return json.loads(out or b"{}")
 
 
@@ -2272,9 +2694,7 @@ async def _count_video_frames(path):
            "-show_entries", "stream=nb_read_frames",
            "-of", "default=nokey=1:noprint_wrappers=1", str(path)]
     try:
-        proc = await asyncio.create_subprocess_exec(
-            *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
-        out, _ = await asyncio.wait_for(proc.communicate(), timeout=60)
+        out, _ = await capture_process(cmd, timeout=60)
         txt = (out or b"").decode("utf-8", "ignore").strip()
         return int(txt) if txt.isdigit() else -1
     except Exception:  # noqa: BLE001
@@ -2285,6 +2705,7 @@ async def validate_media(path, deep=None):
     """Return "ok" (video+audio, decodes clean), "no_audio", or "bad" (corrupt).
     deep=True forces a full-file decode + strict duration/frame checks — used for
     Cobalt/third-party items, which are small and prone to truncation."""
+    await job_stage("processing")
     if deep is None:
         deep = flag("verify_deep")
     # A full decode costs roughly real playback time per gigabyte on a desktop
@@ -2334,10 +2755,9 @@ async def validate_media(path, deep=None):
             cmd = ["ffmpeg", "-v", "error", "-xerror", "-sseof", "-3",
                    "-i", str(path), "-f", "null", "-"]
         try:
-            proc = await asyncio.create_subprocess_exec(
-                *cmd, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.PIPE
-            )
-            _, err = await asyncio.wait_for(proc.communicate(), timeout=120)
+            async with managed_process(cmd, stdout=asyncio.subprocess.DEVNULL,
+                                       stderr=asyncio.subprocess.PIPE) as proc:
+                _, err = await asyncio.wait_for(proc.communicate(), timeout=120)
             if proc.returncode != 0 or (err and err.strip()):
                 logger.warning("Decode errors in %s: %s", path.name, (err or b"")[:150])
                 return "bad"
@@ -2385,10 +2805,7 @@ async def make_thumbnail(path, tmp_dir):
         "-vframes", "1", "-vf", "scale=320:-2", str(thumb),
     ]
     try:
-        proc = await asyncio.create_subprocess_exec(
-            *cmd, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL
-        )
-        await asyncio.wait_for(proc.communicate(), timeout=30)
+        await capture_process(cmd, timeout=30)
         if thumb.exists() and 0 < thumb.stat().st_size <= 200 * 1024:
             return thumb
     except Exception:  # noqa: BLE001
@@ -2417,7 +2834,10 @@ async def send_video_with_meta(message, path):
         kwargs["duration"] = duration
     if thumb:
         kwargs["thumbnail"] = FSInputFile(thumb)
-    sent = await message.reply_video(FSInputFile(path), **kwargs)
+    async def upload():
+        sent = await message.reply_video(FSInputFile(path), **kwargs)
+        return sent
+    sent = await deliver_file(upload, path, "video")
     job = _JOB.get()
     if job is not None:
         try:
@@ -2427,7 +2847,7 @@ async def send_video_with_meta(message, path):
         v = getattr(sent, "video", None)
         if v is not None:
             th = getattr(v, "thumbnail", None)
-            job["thumb"] = getattr(th, "file_id", None) or getattr(v, "file_id", None)
+            job["thumb"] = getattr(th, "file_id", None)
     return sent
 
 
@@ -2608,6 +3028,7 @@ async def send_media(bot, message, items, source, strict=False):
             return False
 
         for group in _chunked(media, 10):
+            await job_stage("sending")
             if len(group) == 1:
                 one = group[0]
                 if isinstance(one, InputMediaPhoto):
@@ -2646,9 +3067,7 @@ async def ytdlp_photos(url):
     _with_auth(args, url)
     args.append(url)
     try:
-        proc = await asyncio.create_subprocess_exec(
-            *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
-        out, _ = await asyncio.wait_for(proc.communicate(), timeout=60)
+        out, _ = await capture_process(args, timeout=60)
         data = json.loads((out or b"{}").decode("utf-8", "ignore") or "{}")
     except Exception:  # noqa: BLE001
         logger.info("photo lookup failed: %s", url)
@@ -2692,19 +3111,31 @@ def photos_from_dump(data):
     return photos
 
 
+_title_cache = {}
+
+
 async def fetch_title(url):
     """Ask yt-dlp for the title only (no download). Returns None on failure."""
+    try:
+        session_key = cookie_fingerprint(Path(COOKIES_FILE).read_text(encoding="utf-8")) if cookies_ready() else ""
+    except OSError:
+        session_key = ""
+    key = (url, session_key)
+    cached = _title_cache.get(key)
+    if cached and cached[0] > time.monotonic():
+        return cached[1]
     args = ["yt-dlp", "--no-playlist", "--skip-download", "--no-warnings",
             "--print", "%(title)s"] + common_ytdlp()
     _with_auth(args, url)
     args.append(url)
     try:
-        proc = await asyncio.create_subprocess_exec(
-            *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
-        out, _ = await asyncio.wait_for(proc.communicate(), timeout=45)
+        out, _ = await capture_process(args, timeout=45)
         title = (out or b"").decode("utf-8", "ignore").strip().splitlines()
         title = title[0].strip() if title else ""
         if title and title.upper() != "NA":
+            if len(_title_cache) >= 256:
+                _title_cache.pop(next(iter(_title_cache)))
+            _title_cache[key] = (time.monotonic() + 300, title[:200])
             return title[:200]
     except Exception:  # noqa: BLE001
         logger.info("title lookup failed: %s", url)
@@ -2857,8 +3288,13 @@ async def try_ytdlp_send(bot, message, dl_url, ladder, prefer_merge, allow_silen
         for height in ladder:
             for fmt in (fn(height) for fn in fmt_order):
                 f, error = await ytdlp_download(dl_url, height, fmt)
+                if error and _FAIL_REASON.get() == "err_network":
+                    await asyncio.sleep(min(3, tunable("job_retry_delay")))
+                    f, error = await ytdlp_download(dl_url, height, fmt)
+                    if error:
+                        return "fail", None
                 if error:
-                    if _is_instagram_story(dl_url) and _FAIL_REASON.get() == "err_private":
+                    if _FAIL_REASON.get() in {"err_private", "err_age", "err_geo", "err_gone", "err_rate"}:
                         return "fail", None  # Lower resolution cannot grant access.
                     if _FAIL_REASON.get() == "no_space":
                         # Stepping down here is worse than failing. The disk is
@@ -2937,12 +3373,11 @@ async def try_ytdlp_audio(bot, message, url):
             return "toobig", None
         title, artist = await probe_tags(audio_path)
         fname = ((title or "").strip()[:120] or "audio") + ".mp3"
-        sent = await message.reply_audio(
-            FSInputFile(audio_path, filename=fname),
-            title=title,
-            performer=artist,
-            disable_notification=True,
-        )
+        async def upload():
+            return await message.reply_audio(
+                FSInputFile(audio_path, filename=fname), title=title,
+                performer=artist, disable_notification=True)
+        sent = await deliver_file(upload, audio_path, "audio")
         job = _JOB.get()
         if job is not None:
             try:
@@ -2968,11 +3403,13 @@ async def _video_with_cache(bot, message, cache_url, dl_url, ladder, prefer_merg
         if not c:
             return None
         try:
+            await job_stage("sending")
             await message.reply_video(c["file_id"], disable_notification=True)
             logger.info("cache hit (video) %s", cache_url)
             return "sent"
-        except Exception:  # noqa: BLE001
+        except TelegramBadRequest:
             cache_del(cache_url, False)
+            await job_stage("queued")
         return None
 
     async def download():
@@ -3007,10 +3444,41 @@ async def _video_with_cache(bot, message, cache_url, dl_url, ladder, prefer_merg
 
 
 async def process_url(bot, message, url, is_private, want_audio, via="chat", trim=None,
-                      quality=None, abr=None):
+                      quality=None, abr=None, job=None):
+    if job is None:
+        uid = getattr(getattr(message, "from_user", None), "id", message.chat.id)
+        active = [j for j in _progress.values()
+                  if j["status"] not in {"done", "error", "cancelled", "interrupted", "toobig"}]
+        if (len(active) >= RUNTIME.queue_limit or
+                sum(j["user_id"] == uid for j in active) >= RUNTIME.user_queue_limit):
+            await message.reply(t("queue_full"))
+            return "fail", _source_label(url, _platform(url), want_audio)
+        job = _new_job(message, _source_label(url, _platform(url), want_audio),
+                       "audio" if want_audio else "video")
+    job.update(url=url, via=via, trim=trim, quality=quality, abr=abr)
+    try:
+        await save_job(job)
+        task = spawn(_execute_job(bot, message, url, is_private, want_audio,
+                                  via, trim, quality, abr, job))
+        _job_tasks[job["id"]] = task
+        return await asyncio.shield(task)
+    except asyncio.CancelledError:
+        task = _job_tasks.get(job["id"])
+        if task is not None and not task.done():
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+        raise
+    finally:
+        _job_tasks.pop(job["id"], None)
+        if job["status"] not in {"done", "error", "cancelled", "interrupted", "toobig"}:
+            _finish_job(job, "cancelled" if job.get("cancel_requested") else "interrupted")
+        await save_job(job)
+
+
+async def _execute_job(bot, message, url, is_private, want_audio, via, trim,
+                       quality, abr, job):
     plat = _platform(url)
     source = _source_label(url, plat, want_audio)
-    job = _new_job(message, source, "audio" if want_audio else "video")
     _JOB.set(job)
     _FAIL_REASON.set(None)
     _TRIM.set(trim)
@@ -3032,6 +3500,9 @@ async def process_url(bot, message, url, is_private, want_audio, via="chat", tri
         return "fail", source
     try:
         async with _user_gate(uid):
+            if not reserve_job_disk(job):
+                await message.reply(t("no_space"))
+                return "fail", source
             job_retries = tunable("job_retries")
             for attempt in range(job_retries + 1):
                 try:
@@ -3053,6 +3524,8 @@ async def process_url(bot, message, url, is_private, want_audio, via="chat", tri
                     job["source"] = source
                     break
                 except asyncio.TimeoutError:
+                    if job["status"] == "sending":
+                        job["delivery_uncertain"] = True
                     logger.warning("Job deadline of %ds reached: %s",
                                    job_deadline(url), url)
                     status = "error"
@@ -3061,6 +3534,9 @@ async def process_url(bot, message, url, is_private, want_audio, via="chat", tri
                 except TelegramRetryAfter:
                     raise            # already handled by the middleware
                 except Exception:  # noqa: BLE001
+                    if job["status"] == "sending":
+                        job.setdefault("delivery_uncertain", True)
+                        raise  # Do not redownload/resend an upload with an unknown outcome.
                     if attempt < job_retries:
                         logger.warning("Transient error on %s, retry %d/%d in %.0fs",
                                        url, attempt + 1, job_retries,
@@ -3068,6 +3544,11 @@ async def process_url(bot, message, url, is_private, want_audio, via="chat", tri
                         await asyncio.sleep(tunable("job_retry_delay"))
                         continue
                     raise
+    except asyncio.CancelledError:
+        if job["status"] == "sending":
+            job["delivery_uncertain"] = True
+        status = "cancelled" if job.get("cancel_requested") else "interrupted"
+        return status, source
     except Exception:  # noqa: BLE001
         logger.exception("Error processing %s", url)
         status = "error"
@@ -3076,6 +3557,8 @@ async def process_url(bot, message, url, is_private, want_audio, via="chat", tri
         except Exception:  # noqa: BLE001
             pass
     finally:
+        _disk_reservations.pop(job["id"], None)
+        job["failure_reason"] = _FAIL_REASON.get() or job.get("failure_reason")
         _finish_job(job, status)
         took = time.time() - job["ts"]
         _notify_after = tunable("long_job_notify")
@@ -3086,9 +3569,12 @@ async def process_url(bot, message, url, is_private, want_audio, via="chat", tri
             except Exception:  # noqa: BLE001
                 pass
         await record_event(message, url, plat, source, status, via)
+    return status, source
 
 
 async def _do_process(bot, message, url, is_private, want_audio, plat, source):
+    if (_JOB.get() or {}).get("retained_from"):
+        return await send_retained(message, _JOB.get()["retained_from"]), source
     story = _is_instagram_story(url)
     if story and not await asyncio.to_thread(instagram_session_ready):
         _FAIL_REASON.set("err_private")
@@ -3111,10 +3597,12 @@ async def _do_process(bot, message, url, is_private, want_audio, plat, source):
             c = cache_get(url, True)
             if c:
                 try:
+                    await job_stage("sending")
                     await message.reply_audio(c["file_id"], disable_notification=True)
                     return "sent", source
-                except Exception:  # noqa: BLE001
+                except TelegramBadRequest:
                     cache_del(url, True)
+                    await job_stage("queued")
             status, sent = await try_ytdlp_audio(bot, message, url)
             if status == "sent" and sent and sent.audio:
                 cache_set(url, True, "audio", sent.audio.file_id)
@@ -3205,6 +3693,14 @@ async def _do_process(bot, message, url, is_private, want_audio, plat, source):
                     logger.info("Skipping %s for %s — paused after repeated failures",
                                 eng, plat)
                     continue
+                _FAIL_REASON.set(None)
+                job = _JOB.get()
+                if job is not None:
+                    job["engine"] = eng
+                    if eng == "ytdlp":
+                        job["engine_version"] = installed_version("yt-dlp")
+                    else:
+                        job.pop("engine_version", None)
                 if eng == "cobalt":
                     if cobalt_on() and await handle_cobalt(bot, message, dl_url,
                                                             strict=strict):
@@ -3224,7 +3720,12 @@ async def _do_process(bot, message, url, is_private, want_audio, plat, source):
                         if st != "toobig":
                             await _maybe_soundtrack()
                         return st, source
-                    engine_result(plat, eng, False)
+                    if _FAIL_REASON.get() not in {"err_private", "err_age", "err_geo", "err_gone", "no_space"}:
+                        engine_result(plat, eng, False)
+        reason = _FAIL_REASON.get() or (_JOB.get() or {}).get("failure_reason")
+        if reason in {"err_private", "err_age", "err_geo", "err_gone", "no_space", "err_rate"}:
+            await message.reply(t(reason))
+            return "fail", source
         if COBALT_FALLBACK_URL and await handle_cobalt(bot, message, dl_url, COBALT_FALLBACK_URL):
             logger.info("Sent via secondary Cobalt: %s", dl_url)
             return "sent", source
@@ -3468,8 +3969,8 @@ def cookies_status():
     if not cookies_ready():
         return {"present": False}
     try:
-        ok, info = parse_cookies_txt(
-            Path(COOKIES_FILE).read_text(encoding="utf-8", errors="ignore"))
+        text = Path(COOKIES_FILE).read_text(encoding="utf-8")
+        ok, info = parse_cookies_txt(text)
     except Exception:  # noqa: BLE001
         return {"present": False}
     if not ok:
@@ -3485,7 +3986,10 @@ def cookies_status():
     else:
         state = "ok"
     try:
-        updated = int(Path(COOKIES_FILE).stat().st_mtime)
+        row = db_conn().execute(
+            "SELECT uploaded_at FROM cookie_metadata WHERE fingerprint=?",
+            (cookie_fingerprint(text),)).fetchone() if not LITE else None
+        updated = row[0] if row else None
     except Exception:  # noqa: BLE001
         updated = None
     return {
@@ -3496,8 +4000,13 @@ def cookies_status():
         "sites": info.get("domains", []),
         "keys": info.get("auth", []),
         "updated": updated,
+        "uploaded_at": updated,
+        "checked_at": None,
+        "authentication": "unverified",
+        "expiry_is_estimate": True,
         "expires": info.get("expires"),
         "expires_key": info.get("expires_key"),
+        "services": info.get("services", {}),
     }
 
 
@@ -3654,7 +4163,7 @@ async def start_web_server(bot):
 
     async def api_download(request):
         try:
-            body = await request.json()
+            body = DownloadRequest.model_validate(await request.json()).model_dump()
         except Exception:  # noqa: BLE001
             return web.json_response({"ok": False, "error": "bad_request"}, status=400)
         user = verify_webapp_init_data(body.get("initData", ""), BOT_TOKEN)
@@ -3686,13 +4195,126 @@ async def start_web_server(bot):
         urls = urls[:tunable("max_links")]
         trim = _extract_trim(body.get("url", ""), extract_urls(body.get("url", "")))
         target = ChatTarget(bot, uid)
+        active = [j for j in _progress.values()
+                  if j["status"] not in {"done", "error", "cancelled", "interrupted", "toobig"}]
+        if (len(active) + len(urls) > RUNTIME.queue_limit or
+                sum(j["user_id"] == uid for j in active) + len(urls) > RUNTIME.user_queue_limit):
+            return web.json_response({"ok": False, "error": "queue_full"}, status=429)
+        jobs = []
         for u in urls:
+            audio = _is_youtube_music(u) or base_audio
+            job = _new_job(target, _source_label(u, _platform(u), audio),
+                           "audio" if audio else "video")
+            job.update(url=u, via="miniapp", trim=trim, quality=q, abr=abr)
+            jobs.append(job)
+        try:
+            await save_jobs(jobs)
+        except Exception:
+            for job in jobs:
+                _progress.pop(job["id"], None)
+            logger.exception("Could not persist submitted batch")
+            return web.json_response({"ok": False, "error": "storage_unavailable"}, status=503)
+        for job in jobs:
             spawn(process_url(
-                bot, target, u, is_extended,
-                _is_youtube_music(u) or base_audio, "miniapp", trim=trim,
-                quality=q, abr=abr))
+                bot, target, job["url"], is_extended,
+                job["mode"] == "audio", "miniapp", trim=trim, quality=q, abr=abr, job=job))
         logger.info("Mini App job from user %s (level=%s): %d link(s)", uid, level, len(urls))
-        return web.json_response({"ok": True, "queued": len(urls)})
+        return web.json_response({"ok": True, "queued": len(urls), "job_ids": [j["id"] for j in jobs]})
+
+    async def api_history(request):
+        user = verify_webapp_init_data(request.headers.get("X-Telegram-Init-Data", ""), BOT_TOKEN)
+        if not user or not user.get("id"):
+            return web.json_response({"ok": False, "error": "forbidden"}, status=403)
+        uid = int(user["id"])
+        if resolve_access(uid, user.get("username"), uid, False) == "none":
+            return web.json_response({"ok": False, "error": "forbidden"}, status=403)
+        try:
+            before = float(request.query["before"]) if "before" in request.query else None
+            before_id = request.query.get("before_id")
+            if before_id is not None and (before is None or not re.fullmatch(r"[0-9a-f]{12}", before_id)):
+                raise ValueError("invalid cursor id")
+            limit = int(request.query.get("limit", 50))
+            if before is not None and not (0 < before < 1e12):
+                raise ValueError("invalid cursor")
+        except ValueError:
+            return web.json_response({"ok": False, "error": "bad_request"}, status=400)
+        jobs = await job_history(uid, _is_admin_user(user), limit, before,
+                                 request.query.get("status"), request.query.get("q", "")[:200], before_id)
+        return web.json_response({"ok": True, "jobs": jobs,
+                                  "next_before": jobs[-1]["ts"] if jobs else None,
+                                  "next_before_id": jobs[-1]["id"] if jobs else None})
+
+    async def api_cancel(request):
+        user = verify_webapp_init_data(request.headers.get("X-Telegram-Init-Data", ""), BOT_TOKEN)
+        if not user or not user.get("id"):
+            return web.json_response({"ok": False, "error": "forbidden"}, status=403)
+        job = _progress.get(request.match_info["job_id"])
+        uid = int(user["id"])
+        if not job or not (_is_admin_user(user) or
+                          (job["user_id"] == uid and job["chat_id"] == uid)):
+            return web.json_response({"ok": False, "error": "not_found"}, status=404)
+        if resolve_access(uid, user.get("username"), uid, False) == "none":
+            return web.json_response({"ok": False, "error": "forbidden"}, status=403)
+        task = _job_tasks.get(job["id"])
+        if task is None or task.done():
+            return web.json_response({"ok": False, "error": "not_running"}, status=409)
+        job["cancel_requested"] = True
+        task.cancel()
+        return web.json_response({"ok": True, "id": job["id"]}, status=202)
+
+    async def api_retry(request):
+        user = verify_webapp_init_data(request.headers.get("X-Telegram-Init-Data", ""), BOT_TOKEN)
+        if not user or not user.get("id"):
+            return web.json_response({"ok": False, "error": "forbidden"}, status=403)
+        uid = int(user["id"])
+        level = resolve_access(uid, user.get("username"), uid, False)
+        if level == "none":
+            return web.json_response({"ok": False, "error": "forbidden"}, status=403)
+        async with aiosqlite.connect(STATS_DB, timeout=10) as con:
+            cursor = await con.execute("SELECT payload FROM jobs WHERE id=? AND user_id=? AND chat_id=?",
+                                       (request.match_info["job_id"], uid, uid))
+            row = await cursor.fetchone()
+        if not row:
+            return web.json_response({"ok": False, "error": "not_found"}, status=404)
+        old = json.loads(row[0])
+        if old["status"] not in {"error", "cancelled", "interrupted", "toobig"}:
+            return web.json_response({"ok": False, "error": "not_retryable"}, status=409)
+        if old.get("delivery_uncertain"):
+            try:
+                consent = await request.json()
+            except Exception:
+                consent = {}
+            if not isinstance(consent, dict) or consent.get("confirm_duplicate_risk") is not True:
+                return web.json_response({"ok": False, "error": "confirm_duplicate_risk"}, status=409)
+        if any(j.get("retry_of") == old["id"] and j["status"] not in
+               {"done", "error", "cancelled", "interrupted", "toobig"} for j in _progress.values()):
+            return web.json_response({"ok": False, "error": "retry_already_queued"}, status=409)
+        # Revalidate service switches and permissions; history is not authorization.
+        urls = extract_urls(old.get("url", ""))
+        extended = level in ("extended", "admin")
+        if not urls or (not extended and (_needs_extended(urls[0]) or old["mode"] == "audio")):
+            return web.json_response({"ok": False, "error": "no_access"}, status=403)
+        active = [j for j in _progress.values() if j["status"] not in
+                  {"done", "error", "cancelled", "interrupted", "toobig"}]
+        if (len(active) >= RUNTIME.queue_limit or
+                sum(j["user_id"] == uid for j in active) >= RUNTIME.user_queue_limit):
+            return web.json_response({"ok": False, "error": "queue_full"}, status=429)
+        target = ChatTarget(bot, uid)
+        job = _new_job(target, old["source"], old["mode"])
+        job["retry_of"] = old["id"]
+        if retained_media_path(old.get("retained")):
+            job["retained_from"] = old["retained"]
+        job.update(url=urls[0], via="miniapp", trim=old.get("trim"),
+                   quality=old.get("quality"), abr=old.get("abr"))
+        try:
+            await save_job(job)
+        except Exception:
+            _progress.pop(job["id"], None)
+            logger.exception("Could not persist retry")
+            return web.json_response({"ok": False, "error": "storage_unavailable"}, status=503)
+        spawn(process_url(bot, target, urls[0], extended, old["mode"] == "audio", "miniapp",
+                          trim=old.get("trim"), quality=old.get("quality"), abr=old.get("abr"), job=job))
+        return web.json_response({"ok": True, "job_id": job["id"]}, status=202)
 
     async def api_stats(request):
         user = verify_webapp_init_data(request.headers.get("X-Telegram-Init-Data", ""), BOT_TOKEN)
@@ -3824,11 +4446,7 @@ async def start_web_server(bot):
             # Через ті самі ворота, що й завантаження. Без них прев'ю на кожне
             # натискання клавіші запускало б необмежену кількість процесів
             # yt-dlp, і кожен з них — окремий мережевий клієнт.
-            async with download_semaphore:
-                proc = await asyncio.create_subprocess_exec(
-                    *args, stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.DEVNULL)
-                out, _ = await asyncio.wait_for(proc.communicate(), timeout=45)
+            out, _ = await capture_process(args, timeout=45)
             data = json.loads(out or b"{}")
         except Exception:  # noqa: BLE001
             return web.json_response({"ok": False, "error": "no_info"}, status=404)
@@ -3863,10 +4481,13 @@ async def start_web_server(bot):
             j = _progress.get(jid)
             if not j:
                 continue
-            done = j["status"] in ("done", "error", "toobig")
-            if (done and now - j["updated"] > 25) or (now - j["updated"] > 1800):
+            done = j["status"] in ("done", "error", "toobig", "cancelled", "interrupted")
+            if done and now - j["updated"] > 25:
                 _progress.pop(jid, None)
-        jobs = [j for j in _progress.values() if admin or j.get("user_id") == uid]
+        if resolve_access(uid, user.get("username"), uid, False) == "none":
+            return web.json_response({"ok": False, "error": "forbidden"}, status=403)
+        jobs = [j for j in _progress.values()
+                if admin or (j.get("user_id") == uid and j.get("chat_id") == uid)]
         jobs.sort(key=lambda j: j["ts"], reverse=True)
         out = [{
             "id": j["id"], "source": j["source"], "mode": j["mode"],
@@ -3882,6 +4503,15 @@ async def start_web_server(bot):
         fid = request.query.get("id", "")
         if not fid:
             return web.Response(status=404)
+        uid = int(user["id"])
+        if resolve_access(uid, user.get("username"), uid, False) == "none":
+            return web.Response(status=403)
+        if not _is_admin_user(user):
+            owned = await asyncio.to_thread(
+                _db_query, "SELECT id FROM events WHERE thumb_id=? AND user_id=? AND chat_id=? LIMIT 1",
+                (fid, uid, uid))
+            if not owned:
+                return web.Response(status=404)
         try:
             data = await fetch_telegram_file(bot, type("F", (), {"file_id": fid})())
             return web.Response(body=data, content_type="image/jpeg")
@@ -3991,6 +4621,9 @@ async def start_web_server(bot):
 
         app.router.add_get("/assets/material.js", serve_material)
         app.router.add_post("/api/download", api_download)
+        app.router.add_get("/api/history", api_history)
+        app.router.add_post("/api/jobs/{job_id}/cancel", api_cancel)
+        app.router.add_post("/api/jobs/{job_id}/retry", api_retry)
         app.router.add_get("/api/stats", api_stats)
         app.router.add_get("/api/events", api_events)
         app.router.add_get("/api/settings", api_settings)
@@ -4013,6 +4646,7 @@ async def start_web_server(bot):
         "Web server on :%d/health%s", HEALTH_PORT,
         " + Mini App /" if WEBAPP_ENABLED else "",
     )
+    return runner
 
 
 # ----------------------------------------------------------------------------
@@ -4035,7 +4669,15 @@ async def cmd_version(message, bot):
     await message.reply(report, disable_notification=True)
 
 
-_COOKIE_KEYS = ("sessionid", "ds_user_id", "csrftoken", "c_user", "xs")
+_COOKIE_AUTH = {
+    "instagram": (("instagram.com",), ("sessionid",)),
+    "facebook": (("facebook.com",), ("c_user", "xs")),
+    "tiktok": (("tiktok.com", "douyin.com"), ("sessionid", "sessionid_ss", "sid_tt")),
+    "youtube": (("youtube.com", "google.com"), ("SID", "HSID", "SSID", "SAPISID", "__Secure-3PSID")),
+    "twitter": (("x.com", "twitter.com"), ("auth_token",)),
+    "reddit": (("reddit.com",), ("reddit_session",)),
+}
+_COOKIE_KEYS = tuple(dict.fromkeys(key for _, keys in _COOKIE_AUTH.values() for key in keys))
 
 # TikTok hands out short-lived technical cookies next to the login ones. They
 # are bound to the browser and the IP that created them and die within minutes,
@@ -4083,23 +4725,37 @@ def parse_cookies_txt(text):
         if not line.strip() or line.lstrip().startswith("#"):
             continue
         parts = line.split("\t")
-        if len(parts) < 7:
+        if (len(parts) != 7 or parts[1] not in {"TRUE", "FALSE"}
+                or parts[3] not in {"TRUE", "FALSE"} or not parts[2].startswith("/")):
             bad += 1
             continue
         rows.append((parts[0], parts[4], parts[5], parts[6]))
     if not rows:
         return False, {"reason": "empty"}
+    if bad:
+        return False, {"reason": "malformed"}
     domains, names, soonest, soonest_key = set(), set(), None, None
+    services = {}
     now = time.time()
     for dom, exp, name, val in rows:
         if not val:
             continue
         domains.add(dom.lstrip("."))
-        names.add(name)
         try:
-            e = int(exp)
+            e = int(exp or 0)
         except (TypeError, ValueError):
-            e = 0
+            return False, {"reason": "malformed"}
+        host = dom.lstrip(".").lower()
+        service = next((svc for svc, (hosts, keys) in _COOKIE_AUTH.items()
+                        if name in keys and any(host == h or host.endswith("." + h) for h in hosts)), None)
+        if service is None:
+            continue
+        names.add(name)
+        summary = services.setdefault(service, {"keys": [], "expires": None, "authentication": "unverified"})
+        if name not in summary["keys"]:
+            summary["keys"].append(name)
+        if e and (summary["expires"] is None or e < summary["expires"]):
+            summary["expires"] = e
         # Only auth cookies matter for the lifetime: technical ones (wd, rur…)
         # expire quickly and would understate how long the session lasts.
         if e and name in _COOKIE_KEYS and (soonest is None or e < soonest):
@@ -4126,6 +4782,7 @@ def parse_cookies_txt(text):
         # ключ, якому сайт просто не подовжує термін.
         "expires": soonest,
         "expires_key": soonest_key,
+        "services": services,
     }
 
 
@@ -4200,17 +4857,44 @@ def write_cobalt_cookies(text):
         return 0
 
 
+def cookie_fingerprint(text):
+    """Stable across newline/comment/order changes; never expose this digest in API."""
+    rows = []
+    for line in text.splitlines():
+        if line.startswith("#HttpOnly_"):
+            line = line[len("#HttpOnly_"):]
+        if line.strip() and not line.lstrip().startswith("#"):
+            rows.append(line.rstrip())
+    return hashlib.sha256("\n".join(sorted(rows)).encode("utf-8")).hexdigest()
+
+
 def store_cookies(text):
     """Write the cookies file with tight permissions. Returns the path."""
+    text, _ = strip_volatile_cookies(text)
+    ok, info = parse_cookies_txt(text)
+    if not ok:
+        raise ValueError("Invalid cookies file: " + info.get("reason", "invalid"))
+    if not text.startswith(("# Netscape HTTP Cookie File", "# HTTP Cookie File")):
+        text = "# Netscape HTTP Cookie File\n" + text
+    # Validate using the actual Netscape reader before replacing a working file.
     path = Path(COOKIES_FILE)
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(text, encoding="utf-8")
+    fd, name = tempfile.mkstemp(prefix=".cookies-", dir=path.parent)
+    tmp = Path(name)
     try:
-        os.chmod(tmp, 0o600)
-    except Exception:  # noqa: BLE001
-        pass
-    os.replace(tmp, path)
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as output:
+            output.write(text)
+        jar = MozillaCookieJar(str(tmp))
+        jar.load(ignore_discard=True, ignore_expires=True)
+        if not LITE:
+            con = db_conn()
+            db_migrate(con)
+            con.execute("INSERT OR IGNORE INTO cookie_metadata VALUES(?,?)",
+                        (cookie_fingerprint(text), int(time.time())))
+            con.commit()
+        os.replace(tmp, path)
+    finally:
+        tmp.unlink(missing_ok=True)
     write_cobalt_cookies(text)      # the fallback needs the same session
     return path
 
@@ -4372,6 +5056,7 @@ def restore_backup(raw):
                 logger.warning("Restore refused: events is missing %s",
                                sorted(EVENT_COLUMNS - cols))
                 return False, "wrong_columns"
+            db_migrate(probe)  # Validate/migrate the incoming copy before touching live data.
         finally:
             probe.close()
 
@@ -4398,9 +5083,14 @@ def restore_backup(raw):
             finally:
                 keep_dst.close()
                 keep_src.close()
-        for suffix in ("-wal", "-shm"):
-            Path(STATS_DB + suffix).unlink(missing_ok=True)
-        os.replace(str(tmp), STATS_DB)
+        # SQLite's backup API coordinates with open WAL connections, including Windows.
+        incoming = sqlite3.connect(str(tmp), timeout=10)
+        destination = sqlite3.connect(STATS_DB, timeout=10)
+        try:
+            incoming.backup(destination)
+        finally:
+            destination.close()
+            incoming.close()
         db_reopen()
         con = db_conn()
         db_migrate(con)               # an older backup may predate a migration
@@ -4438,6 +5128,7 @@ async def cmd_cookies(message):
     if len(arg) > 1 and arg[1].strip().lower() in ("delete", "remove", "видалити"):
         try:
             path.unlink(missing_ok=True)
+            write_cobalt_cookies("")
             await message.reply(t("ck_deleted"), disable_notification=True)
         except Exception:  # noqa: BLE001
             await message.reply(t("ck_delete_fail"), disable_notification=True)
@@ -4662,6 +5353,24 @@ async def self_check(bot, me):
     """
     lines = []
 
+    if TELEGRAM_API_URL:
+        readable = False
+        for root in TGAPI_ROOTS:
+            path = Path(root)
+            if not path.is_dir():
+                continue
+            try:
+                readable = os.access(path, os.R_OK | os.X_OK) and all(
+                    os.access(entry, os.R_OK | (os.X_OK if entry.is_dir() else 0))
+                    for entry in path.iterdir())
+            except OSError:
+                readable = False
+            if readable:
+                break
+        lines.append("Telegram shared storage: " + ("readable" if readable else "CHECK MOUNT/UID"))
+        if not readable:
+            logger.warning("Local Telegram storage is not readable; check shared volume and matching UID, not chmod 777")
+
     if not getattr(me, "can_read_all_group_messages", False):
         logger.warning(
             "Group privacy is ON: in groups this bot only sees commands and "
@@ -4771,6 +5480,8 @@ async def main():
 
     db_init()
     settings_load_sync()
+    await recover_jobs()
+    await asyncio.to_thread(clean_retained_media)
     cache_load()
     if TELEGRAM_API_URL:
         session = AiohttpSession(api=TelegramAPIServer.from_base(TELEGRAM_API_URL))
@@ -4812,7 +5523,7 @@ async def main():
         logger.info("LITE mode: groups only%s, no database, no cache, no Mini App",
                     " (%d allowed chats)" % len(ALLOWED_CHATS) if ALLOWED_CHATS else "")
 
-    await start_web_server(bot)
+    web_runner = await start_web_server(bot)
 
     await github_baseline(bot)
 
@@ -4830,6 +5541,8 @@ async def main():
     spawn(update_checker_loop(bot))
     spawn(cache_cleaner_loop())
     spawn(housekeeping_loop())
+    if not LITE:
+        spawn(persist_progress_loop())
 
     # Docker sends SIGTERM on stop and SIGINT on Ctrl+C; both should mean
     # "finish what you started", not "die where you stand".
@@ -4851,6 +5564,7 @@ async def main():
     await asyncio.wait([polling, spawn(stopping.wait())],
                        return_when=asyncio.FIRST_COMPLETED)
     await shutdown(bot)
+    await web_runner.cleanup()
 
 
 if __name__ == "__main__":

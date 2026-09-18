@@ -568,7 +568,8 @@
         ck_warn_label:"Попередити за N днів до кінця", ck_warn_sub:"0 — не нагадувати",
         ck_send_hint:"Щоб оновити — надішли файл cookies.txt боту в приват.",
         ck_on:"Активні", ck_soon:"Скоро спливуть", ck_dead:"Протерміновані", ck_off:"Не підключені",
-        ck_days:"лишилось ~{d} дн.", ck_none:"без терміну",
+        ck_days:"за датою у файлі ~{d} дн.", ck_none:"строк не вказаний",
+        ck_unknown:"дата додавання невідома", ck_unverified:"авторизацію не перевірено",
         ck_upd:"додано", ck_keys:"ключі", ck_until:"до", ck_by:"рахунок за",
         ck_off_hint:"Доступні лише публічні пости. Надішли cookies.txt боту в приват.",
         limits_label:"Навантаження та ліміти",
@@ -659,7 +660,8 @@
         ck_warn_label:"Warn N days before expiry", ck_warn_sub:"0 — never remind",
         ck_send_hint:"To refresh — send a cookies.txt file to the bot in private.",
         ck_on:"Active", ck_soon:"Expiring soon", ck_dead:"Expired", ck_off:"Not connected",
-        ck_days:"~{d} days left", ck_none:"no expiry",
+        ck_days:"file expiry in ~{d} days", ck_none:"expiry unspecified",
+        ck_unknown:"upload date unknown", ck_unverified:"authentication not verified",
         ck_upd:"added", ck_keys:"keys", ck_until:"until", ck_by:"counted from",
         ck_off_hint:"Only public posts are available. Send cookies.txt to the bot in private.",
         limits_label:"Load & limits",
@@ -1114,6 +1116,8 @@
       // зрозуміти, скільки файл насправді лежить.
       if (info.updated) bits.push(tr("ck_upd") + " " + stamp(info.updated)
                                   + " (" + ago(info.updated) + ")");
+      else bits.push(tr("ck_unknown"));
+      bits.push(tr("ck_unverified"));
       // Which key the countdown comes from. A day count that never moves is
       // almost always a key whose expiry the site never renews — showing the
       // key and its date makes that visible instead of looking like a bug.

@@ -1,0 +1,48 @@
+[project]
+name = "sdp-downloader"
+version = "4.2.0"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "aiogram==3.31.0",
+  "yt-dlp[default,curl-cffi]==2026.8.19",
+  "bgutil-ytdlp-pot-provider",
+  "pydantic>=2.11,<3",
+  "pydantic-settings>=2.9,<3",
+  "aiosqlite>=0.21,<1",
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=8,<10",
+  "pytest-asyncio>=1,<2",
+  "hypothesis>=6,<7",
+  "coverage[toml]>=7,<8",
+  "ruff>=0.12,<1",
+  "pre-commit>=4,<5",
+  "pip-audit>=2,<3",
+  "pyyaml>=6,<7",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["tests", "."]
+asyncio_mode = "strict"
+asyncio_default_fixture_loop_scope = "function"
+
+[tool.coverage.run]
+include = ["*/bot.py"]
+omit = ["*/site-packages/*"]
+branch = true
+concurrency = ["thread"]
+
+[tool.coverage.report]
+show_missing = true
+skip_empty = true
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+# Start with correctness checks; avoid unrelated formatting changes.
+select = ["E9", "F63", "F7", "F82"]

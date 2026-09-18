@@ -5,6 +5,7 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  workflow_call:
 
 jobs:
   tests:
@@ -23,14 +24,25 @@ jobs:
       - name: Залежності
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt pyyaml
+          pip install uv==0.12.16
+          uv sync --locked
+
+      - name: Перевірка Python та lock-файлу
+        run: |
+          uv run --locked ruff check bot.py tests
+          uv export --locked --no-dev --no-emit-project --format requirements-txt --output-file requirements.lock
+          git diff --exit-code -- requirements.lock
 
       - name: Компіляція Python
         run: python -m compileall -q bot.py tests
 
       - name: Тести
-        working-directory: tests
-        run: python -m unittest discover -s . -p "test_*.py" -v
+        run: |
+          uv run --locked coverage run -m pytest -q
+          uv run --locked coverage report
+
+      - name: Відомі вразливості Python-залежностей
+        run: uv run --locked pip-audit -r requirements.lock --no-deps --disable-pip
 
       - uses: actions/setup-node@v4
         with:
@@ -40,6 +52,17 @@ jobs:
         run: |
           npm ci --no-audit --no-fund
           npm run build
+
+      - name: Контракт API
+        run: |
+          uv run --locked python scripts/export_openapi.py
+          npm run api:types
+          git diff --exit-code -- frontend/openapi.json frontend/api-types.d.ts
+
+      - name: Браузерні перевірки
+        run: |
+          npx playwright install --with-deps chromium
+          npm run test:ui
 
       - name: Синтаксис JS у Mini App
         run: |

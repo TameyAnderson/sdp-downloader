@@ -1,0 +1,469 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "SDP Jobs API",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/api/download": {
+      "post": {
+        "description": "initData authentication is supplied in the JSON body.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DownloadRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DownloadResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "403": {
+            "description": "Authentication or access denied"
+          },
+          "429": {
+            "description": "Queue or request limit"
+          }
+        }
+      }
+    },
+    "/api/history": {
+      "get": {
+        "security": [
+          {
+            "telegramInitData": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "in": "query",
+            "name": "before",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "before_id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HistoryResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid cursor"
+          },
+          "403": {
+            "description": "Authentication or access denied"
+          }
+        }
+      }
+    },
+    "/api/jobs/{job_id}/cancel": {
+      "post": {
+        "security": [
+          {
+            "telegramInitData": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Action accepted"
+          },
+          "403": {
+            "description": "Authentication or access denied"
+          },
+          "404": {
+            "description": "No accessible job"
+          },
+          "409": {
+            "description": "Job state does not allow this action"
+          },
+          "429": {
+            "description": "Queue or request limit"
+          }
+        }
+      }
+    },
+    "/api/jobs/{job_id}/retry": {
+      "post": {
+        "security": [
+          {
+            "telegramInitData": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Action accepted"
+          },
+          "403": {
+            "description": "Authentication or access denied"
+          },
+          "404": {
+            "description": "No accessible job"
+          },
+          "409": {
+            "description": "Job state does not allow this action"
+          },
+          "429": {
+            "description": "Queue or request limit"
+          }
+        },
+        "requestBody": {
+          "description": "Explicit acknowledgement when a previous delivery may have succeeded.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "confirm_duplicate_risk": {
+                    "type": "boolean",
+                    "default": false
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "DownloadRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "initData": {
+            "default": "",
+            "maxLength": 16384,
+            "title": "Initdata",
+            "type": "string"
+          },
+          "url": {
+            "maxLength": 32768,
+            "minLength": 1,
+            "title": "Url",
+            "type": "string"
+          },
+          "mode": {
+            "default": "video",
+            "pattern": "^(video|audio)$",
+            "title": "Mode",
+            "type": "string"
+          },
+          "quality": {
+            "anyOf": [
+              {
+                "maximum": 4320,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Quality"
+          },
+          "abr": {
+            "anyOf": [
+              {
+                "maximum": 320,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Abr"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "title": "DownloadRequest",
+        "type": "object"
+      },
+      "DownloadResponse": {
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "queued": {
+            "title": "Queued",
+            "type": "integer"
+          },
+          "job_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Job Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "ok",
+          "queued",
+          "job_ids"
+        ],
+        "title": "DownloadResponse",
+        "type": "object"
+      },
+      "FailureInfo": {
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/FailureKind"
+          },
+          "message_key": {
+            "title": "Message Key",
+            "type": "string"
+          },
+          "retryable": {
+            "title": "Retryable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "kind",
+          "message_key",
+          "retryable"
+        ],
+        "title": "FailureInfo",
+        "type": "object"
+      },
+      "FailureKind": {
+        "enum": [
+          "auth_required",
+          "unavailable",
+          "rate_limited",
+          "network",
+          "extractor",
+          "resource",
+          "unknown"
+        ],
+        "title": "FailureKind",
+        "type": "string"
+      },
+      "JobView": {
+        "additionalProperties": true,
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
+          },
+          "chat_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chat Id"
+          },
+          "ts": {
+            "title": "Ts",
+            "type": "number"
+          },
+          "updated": {
+            "title": "Updated",
+            "type": "number"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "mode": {
+            "title": "Mode",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Pct"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Url"
+          },
+          "failure": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FailureInfo"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "id",
+          "user_id",
+          "chat_id",
+          "ts",
+          "updated",
+          "source",
+          "mode",
+          "status"
+        ],
+        "title": "JobView",
+        "type": "object"
+      },
+      "HistoryResponse": {
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "jobs": {
+            "items": {
+              "$ref": "#/components/schemas/JobView"
+            },
+            "title": "Jobs",
+            "type": "array"
+          },
+          "next_before": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Before"
+          },
+          "next_before_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Before Id"
+          }
+        },
+        "required": [
+          "ok",
+          "jobs",
+          "next_before",
+          "next_before_id"
+        ],
+        "title": "HistoryResponse",
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "telegramInitData": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Telegram-Init-Data"
+      }
+    }
+  }
+}

@@ -1,4 +1,11 @@
 .git
+.venv
+.venv312
+.hypothesis
+.pytest_cache
+.ruff_cache
+.coverage*
+htmlcov
 node_modules
 static/material.js
 .gitignore

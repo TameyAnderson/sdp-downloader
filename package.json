@@ -1,8 +1,18 @@
 {
   "name": "sdp-miniapp",
-  "version": "1.4.0",
+  "version": "4.2.0",
   "private": true,
-  "scripts": { "build": "node frontend/build.mjs" },
-  "dependencies": { "@material/web": "2.5.0" },
-  "devDependencies": { "esbuild": "0.28.2" }
+  "scripts": {
+    "build": "node frontend/build.mjs",
+    "test:ui": "node tests/miniapp-ui.cjs",
+    "api:types": "openapi-typescript frontend/openapi.json -o frontend/api-types.d.ts"
+  },
+  "dependencies": {
+    "@material/web": "2.5.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "esbuild": "0.28.2",
+    "openapi-typescript": "^7.13.0"
+  }
 }

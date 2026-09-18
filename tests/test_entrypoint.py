@@ -8,12 +8,18 @@ by nature: the bot simply runs an old version, and broken extractors stay
 broken until somebody reads the log.
 """
 import re
+import os
+import shutil
 import subprocess
 import unittest
+from pathlib import Path
 
 from helper import ROOT, read
 
 SCRIPT = ROOT / "entrypoint.sh"
+SHELL = shutil.which("sh")
+if not SHELL and Path("C:/Program Files/Git/bin/sh.exe").exists():
+    SHELL = "C:/Program Files/Git/bin/sh.exe"
 
 # Without this extra yt-dlp cannot mimic a browser's TLS fingerprint,
 # and TikTok answers 403 Forbidden even to a request carrying valid cookies.
@@ -34,14 +40,23 @@ def case_block():
 def pip_args(channel):
     """What exactly entrypoint hands to pip for a given channel."""
     probe = 'CHAN="${YTDLP_CHANNEL:-stable}"\n%s\nfor a in "$@"; do echo "$a"; done\n' % case_block()
-    env = {"YTDLP_CHANNEL": channel} if channel else {}
-    out = subprocess.run(["sh", "-c", probe], capture_output=True, text=True, env=env)
+    if not SHELL:
+        raise unittest.SkipTest("POSIX shell unavailable; required in Linux CI")
+    env = dict(os.environ)
+    env.pop("YTDLP_CHANNEL", None)
+    if channel:
+        env["YTDLP_CHANNEL"] = channel
+    out = subprocess.run([SHELL, "-c", probe], capture_output=True, text=True, env=env)
+    if out.returncode:
+        raise AssertionError(out.stderr)
     return [l for l in out.stdout.splitlines() if l]
 
 
 class TestScriptIsValid(unittest.TestCase):
     def test_shell_syntax(self):
-        r = subprocess.run(["sh", "-n", str(SCRIPT)], capture_output=True, text=True)
+        if not SHELL:
+            self.skipTest("POSIX shell unavailable; required in Linux CI")
+        r = subprocess.run([SHELL, "-n", str(SCRIPT)], capture_output=True, text=True)
         self.assertEqual(r.returncode, 0, r.stderr)
 
     def test_starts_the_bot_last(self):

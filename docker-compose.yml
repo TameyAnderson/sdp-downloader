@@ -37,7 +37,16 @@ services:
       # extractors without rebuilding the image.
       # 1 = при старті тягнути свіжий yt-dlp (канал нижче). Лікує зламані
       # екстрактори без перезбірки образу.
-      AUTO_UPGRADE_YTDLP: ${AUTO_UPGRADE_YTDLP:-1}
+      AUTO_UPGRADE_YTDLP: ${AUTO_UPGRADE_YTDLP:-0}
+      # Queue, media processing and failed-upload storage limits.
+      # Ліміти черги, обробки медіа й збереження невдалих відправлень.
+      SDP_QUEUE_LIMIT: ${SDP_QUEUE_LIMIT:-100}
+      SDP_USER_QUEUE_LIMIT: ${SDP_USER_QUEUE_LIMIT:-10}
+      SDP_HISTORY_LIMIT: ${SDP_HISTORY_LIMIT:-100}
+      SDP_FFMPEG_CONCURRENCY: ${SDP_FFMPEG_CONCURRENCY:-2}
+      SDP_RETENTION_SECONDS: ${SDP_RETENTION_SECONDS:-3600}
+      SDP_RETENTION_MAX_MB: ${SDP_RETENTION_MAX_MB:-512}
+      SDP_DISK_RESERVE_MB: ${SDP_DISK_RESERVE_MB:-64}
       ENABLE_TIKTOK: ${ENABLE_TIKTOK:-1}
       ENABLE_YOUTUBE: ${ENABLE_YOUTUBE:-1}
       ENABLE_INSTAGRAM: ${ENABLE_INSTAGRAM:-1}

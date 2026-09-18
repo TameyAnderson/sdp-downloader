@@ -128,6 +128,7 @@ class TestConnections(unittest.TestCase):
         import ast
 
         allowed = {
+            "db_init",        # pre-migration backup
             "db_conn",        # the pool itself
             "send_backup",    # SQLite's online backup needs its own handles
             "restore_backup", # same, plus it replaces the file underneath

@@ -1,0 +1,14 @@
+repos:
+  - repo: local
+    hooks:
+      - id: ruff
+        name: Python correctness checks
+        entry: uv run --locked ruff check
+        language: system
+        types: [python]
+      - id: uv-lock
+        name: Verify dependency lock
+        entry: uv lock --check
+        language: system
+        pass_filenames: false
+        files: ^(pyproject\.toml|uv\.lock)$

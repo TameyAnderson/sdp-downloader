@@ -19,3 +19,8 @@ yt-dlp[default,curl-cffi]==2026.8.19
 # Провайдер PO-токенів для обходу YouTube-захисту
 # (працює в парі з контейнером bgutil-provider).
 bgutil-ytdlp-pot-provider
+
+# Validated settings and asynchronous persistence / Налаштування та асинхронне сховище
+pydantic>=2.11,<3
+pydantic-settings>=2.9,<3
+aiosqlite>=0.21,<1
